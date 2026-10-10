@@ -1,8 +1,12 @@
+import asyncio
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from sqlalchemy import text
+from sqlalchemy.exc import TimeoutError as SQLAlchemyTimeoutError
 from sqlalchemy.orm import Session
 
 from app.api.admin.academic import router as academic_router
@@ -15,8 +19,8 @@ from app.api.faculty.announcements import router as faculty_announcements_router
 from app.api.faculty.attendance import router as faculty_attendance_router
 from app.api.faculty.requests import router as faculty_requests_router
 from app.api.faculty.timetable import router as faculty_timetable_router
-from app.api.student.attendance import router as student_attendance_router
 from app.api.student.announcements import router as student_announcements_router
+from app.api.student.attendance import router as student_attendance_router
 from app.api.student.documents import router as student_documents_router
 from app.api.student.face_profile import router as student_face_router
 from app.api.student.notifications import router as student_notifications_router
@@ -26,6 +30,7 @@ from app.core.database import get_db
 from app.core.logging import configure_logging
 
 configure_logging()
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
@@ -34,6 +39,23 @@ async def lifespan(_: FastAPI):
 
 
 app = FastAPI(title="Attendance Management System API", version="0.1.0", lifespan=lifespan)
+request_limiter = asyncio.Semaphore(settings.http_request_concurrency)
+
+
+@app.exception_handler(SQLAlchemyTimeoutError)
+async def database_pool_timeout_handler(_request, _error: SQLAlchemyTimeoutError):
+    logger.warning("Database connection pool checkout timed out")
+    return JSONResponse(
+        status_code=503,
+        content={"detail": "Database capacity is temporarily unavailable"},
+        headers={"Retry-After": "1"},
+    )
+
+
+@app.middleware("http")
+async def limit_database_backed_http_concurrency(request, call_next):
+    async with request_limiter:
+        return await call_next(request)
 
 
 @app.middleware("http")
@@ -44,8 +66,24 @@ async def validate_browser_origin(request, call_next):
         if origin and origin not in settings.cors_origins:
             from fastapi.responses import JSONResponse
 
-            return JSONResponse(status_code=403, content={"detail": "Request origin is not allowed"})
+            return JSONResponse(
+                status_code=403, content={"detail": "Request origin is not allowed"}
+            )
     return await call_next(request)
+
+
+@app.middleware("http")
+async def add_security_headers(request, call_next):
+    response = await call_next(request)
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    response.headers.setdefault(
+        "Permissions-Policy", "camera=(self), microphone=(), geolocation=()"
+    )
+    if settings.env == "production":
+        response.headers.setdefault("Strict-Transport-Security", "max-age=31536000")
+    return response
 
 
 app.add_middleware(

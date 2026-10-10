@@ -78,8 +78,13 @@ def logout(request: Request, response: Response, db: Session = Depends(get_db)) 
                 )
                 db.commit()
     response.delete_cookie(
-        COOKIE_NAME, path="/", httponly=True, secure=settings.env != "development", samesite=settings.cookie_samesite
+        COOKIE_NAME,
+        path="/",
+        httponly=True,
+        secure=settings.env != "development",
+        samesite=settings.cookie_samesite,
     )
+    response.status_code = status.HTTP_204_NO_CONTENT
     return response
 
 
@@ -100,7 +105,11 @@ def change_password_endpoint(
     except InvalidCredentials:
         raise HTTPException(status_code=400, detail="Current password is incorrect") from None
     response.delete_cookie(
-        COOKIE_NAME, path="/", httponly=True, secure=settings.env != "development", samesite=settings.cookie_samesite
+        COOKIE_NAME,
+        path="/",
+        httponly=True,
+        secure=settings.env != "development",
+        samesite=settings.cookie_samesite,
     )
     return response
 

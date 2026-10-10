@@ -6,7 +6,9 @@ import sys
 import httpx
 
 BASE_URL = os.getenv("AMS_API_BASE_URL", "http://127.0.0.1:8000").rstrip("/")
-PASSWORD = os.getenv("AMS_DEMO_PASSWORD", "SolarisDemo2026!")
+PASSWORD = os.getenv("AMS_DEMO_PASSWORD", "")
+if len(PASSWORD) < 12:
+    raise SystemExit("Set AMS_DEMO_PASSWORD to the private local development password before running smoke checks")
 
 
 def require(client: httpx.Client, path: str, expected: int = 200) -> httpx.Response:

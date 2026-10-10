@@ -9,18 +9,23 @@ from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.core.database import get_db
-from app.core.security import hash_password
+from app.core.security import hash_password, verify_password
 from app.main import app
 from app.models import (
     AttendanceSession,
     AttendanceSessionStatus,
     AuditLog,
+    AuthSession,
     Base,
     Lecture,
     LectureStatus,
+    PasswordResetToken,
+    SupportingDocument,
     User,
     UserRole,
 )
+from app.services.auth import create_password_reset, reset_password
+from app.services.storage import StorageUnavailable
 
 
 @pytest.fixture
@@ -61,6 +66,8 @@ def test_admin_to_student_regularization_journey(api_database: Session, monkeypa
     db.commit()
 
     with TestClient(app) as admin_client:
+        # Protected routes reject an anonymous caller before any role-specific work.
+        assert admin_client.get("/api/admin/overview").status_code == 401
         login = admin_client.post(
             "/api/auth/login",
             json={"email": admin.email, "password": "Admin password 2026!"},
@@ -209,10 +216,68 @@ def test_admin_to_student_regularization_journey(api_database: Session, monkeypa
             )
             assert session_response.status_code == 201, session_response.text
             session_id = session_response.json()["id"]
-            close_response = faculty_client.post(
-                f"/api/faculty/attendance/session/{session_id}/close"
+            unassigned_faculty_response = admin_client.post(
+                "/api/admin/users",
+                json={
+                    "institutional_id": "FAC-2",
+                    "email": "other-faculty@example.edu",
+                    "full_name": "Other Faculty",
+                    "password": "Other faculty password 2026!",
+                    "role": "FACULTY",
+                    "department_id": department_id,
+                },
             )
-            assert close_response.status_code == 200, close_response.text
+            assert unassigned_faculty_response.status_code == 201
+            with TestClient(app) as other_faculty_client:
+                other_login = other_faculty_client.post(
+                    "/api/auth/login",
+                    json={
+                        "email": "other-faculty@example.edu",
+                        "password": "Other faculty password 2026!",
+                    },
+                )
+                assert other_login.status_code == 200
+                assert (
+                    other_faculty_client.get(
+                        f"/api/faculty/attendance/session/{session_id}"
+                    ).status_code
+                    == 403
+                )
+            # The socket route uses its own session factory; bind it to this isolated test DB.
+            monkeypatch.setattr(
+                "app.api.attendance.websocket.SessionLocal",
+                sessionmaker(bind=db.get_bind(), expire_on_commit=False),
+            )
+            with (
+                faculty_client.websocket_connect(f"/ws/attendance/{session_id}") as socket_one,
+                faculty_client.websocket_connect(f"/ws/attendance/{session_id}") as socket_two,
+            ):
+                for socket in (socket_one, socket_two):
+                    started = socket.receive_json()
+                    assert started["type"] == "SESSION_STARTED"
+                    assert started["session_id"] == session_id
+
+                manual_response = faculty_client.post(
+                    "/api/faculty/attendance/manual",
+                    json={
+                        "session_id": session_id,
+                        "student_id": second_student_id,
+                        "status": "ABSENT",
+                        "reason": "Student not present at manual check.",
+                    },
+                )
+                assert manual_response.status_code == 201, manual_response.text
+                for socket in (socket_one, socket_two):
+                    event = socket.receive_json()
+                    assert event["type"] == "ATTENDANCE_RECORDED"
+                    assert event["attendance_id"] == manual_response.json()["id"]
+
+                close_response = faculty_client.post(
+                    f"/api/faculty/attendance/session/{session_id}/close"
+                )
+                assert close_response.status_code == 200, close_response.text
+                for socket in (socket_one, socket_two):
+                    assert socket.receive_json()["type"] == "SESSION_CLOSED"
 
             queued_notifications: list[tuple] = []
             monkeypatch.setattr(
@@ -226,6 +291,18 @@ def test_admin_to_student_regularization_journey(api_database: Session, monkeypa
                     json={"email": "student@example.edu", "password": "Student password 2026!"},
                 )
                 assert student_login.status_code == 200
+                assert student_client.get("/api/admin/overview").status_code == 403
+                assert (
+                    student_client.post(
+                        "/api/faculty/attendance/manual",
+                        json={
+                            "session_id": session_id,
+                            "student_id": student_id,
+                            "status": "PRESENT",
+                        },
+                    ).status_code
+                    == 403
+                )
                 threshold_response = student_client.get("/api/student/attendance/threshold")
                 assert threshold_response.status_code == 200
                 assert threshold_response.json() == {"attendance_threshold": 75.0}
@@ -239,6 +316,86 @@ def test_admin_to_student_regularization_journey(api_database: Session, monkeypa
                 )
                 assert request_response.status_code == 201, request_response.text
                 request_id = request_response.json()["id"]
+
+                stored_objects: dict[str, bytes] = {}
+
+                class TestStorage:
+                    def upload(self, filename: str, content: bytes) -> str:
+                        key = f"test-{len(stored_objects)}.pdf"
+                        stored_objects[key] = content
+                        return key
+
+                    def download(self, storage_key: str) -> bytes:
+                        return stored_objects[storage_key]
+
+                    def delete(self, storage_key: str) -> None:
+                        stored_objects.pop(storage_key, None)
+
+                monkeypatch.setattr(
+                    "app.api.student.documents.get_storage_service", lambda: TestStorage()
+                )
+                upload_response = student_client.post(
+                    f"/api/student/requests/{request_id}/documents",
+                    files={
+                        "file": (
+                            "evidence.pdf",
+                            b"%PDF-1.7 test evidence",
+                            "application/pdf",
+                        )
+                    },
+                )
+                assert upload_response.status_code == 201, upload_response.text
+                document_id = upload_response.json()["id"]
+                assert upload_response.json()["filename"] == "evidence.pdf"
+                assert (
+                    student_client.get(f"/api/student/requests/{request_id}/documents").json()[0][
+                        "id"
+                    ]
+                    == document_id
+                )
+                assert (
+                    student_client.get(f"/api/student/requests/documents/{document_id}").content
+                    == b"%PDF-1.7 test evidence"
+                )
+                assert (
+                    student_client.post(
+                        f"/api/student/requests/{request_id}/documents",
+                        files={"file": ("spoofed.pdf", b"not a pdf", "application/pdf")},
+                    ).status_code
+                    == 415
+                )
+                with TestClient(app) as other_student_client:
+                    other_login = other_student_client.post(
+                        "/api/auth/login",
+                        json={
+                            "email": "student2@example.edu",
+                            "password": "Student two password 2026!",
+                        },
+                    )
+                    assert other_login.status_code == 200
+                    assert (
+                        other_student_client.get(
+                            f"/api/student/requests/documents/{document_id}"
+                        ).status_code
+                        == 404
+                    )
+
+                def unavailable_storage():
+                    raise StorageUnavailable("sanitized provider failure")
+
+                monkeypatch.setattr(
+                    "app.api.student.documents.get_storage_service", unavailable_storage
+                )
+                provider_failure = student_client.post(
+                    f"/api/student/requests/{request_id}/documents",
+                    files={"file": ("second.pdf", b"%PDF-1.7 second", "application/pdf")},
+                )
+                assert provider_failure.status_code == 503
+                own_requests = student_client.get("/api/student/requests").json()
+                assert (
+                    next(item for item in own_requests if item["id"] == request_id)["status"]
+                    == "PENDING"
+                )
 
                 review_response = faculty_client.post(
                     f"/api/faculty/requests/{request_id}/approve", json={"reason": "Verified."}
@@ -266,6 +423,22 @@ def test_admin_to_student_regularization_journey(api_database: Session, monkeypa
 
         actions = set(db.scalars(select(AuditLog.action)).all())
         assert {"CREATE", "OPEN", "CLOSE", "APPROVE"}.issubset(actions)
+        attendance_audit = db.scalar(
+            select(AuditLog).where(
+                AuditLog.resource_type == "attendance",
+                AuditLog.resource_id == manual_response.json()["id"],
+            )
+        )
+        assert attendance_audit is not None
+        assert attendance_audit.actor_id == UUID(faculty_id)
+        assert attendance_audit.reason == "Student not present at manual check."
+        assert attendance_audit.after_state["student_id"] == str(second_student_id)
+        assert attendance_audit.after_state["status"] == "ABSENT"
+        stored_document = db.get(SupportingDocument, UUID(document_id))
+        assert stored_document is not None
+        assert stored_document.original_filename == "evidence.pdf"
+        assert stored_document.content_type == "application/pdf"
+        assert stored_document.size_bytes == len(b"%PDF-1.7 test evidence")
         assert db.get(User, UUID(student_id)) is not None
 
 
@@ -301,3 +474,59 @@ def test_database_allows_only_one_open_session_per_lecture(api_database: Session
     with pytest.raises(IntegrityError):
         db.commit()
     db.rollback()
+
+
+def test_password_reset_is_one_time_and_revokes_existing_sessions(api_database: Session) -> None:
+    db = api_database
+    user = User(
+        institutional_id="STU-RESET",
+        email="reset@example.edu",
+        full_name="Reset User",
+        password_hash=hash_password("Old password 2026!"),
+        role=UserRole.STUDENT,
+        is_active=True,
+    )
+    db.add(user)
+    db.flush()
+    session = AuthSession(user_id=user.id, expires_at=datetime.now(UTC) + timedelta(minutes=20))
+    db.add(session)
+    db.commit()
+
+    raw_token = create_password_reset(db, user)
+    token_row = db.scalar(select(PasswordResetToken).where(PasswordResetToken.user_id == user.id))
+    assert token_row is not None
+    assert raw_token not in token_row.token_digest
+    assert reset_password(db, raw_token, "New password 2026!")
+    assert token_row.used_at is not None
+    assert db.get(AuthSession, session.id).revoked_at is not None
+    assert verify_password("New password 2026!", db.get(User, user.id).password_hash)
+    assert not reset_password(db, raw_token, "Another password 2026!")
+
+
+def test_production_login_cookie_uses_secure_cross_origin_attributes(
+    api_database: Session, monkeypatch
+) -> None:
+    user = User(
+        institutional_id="ADM-COOKIE",
+        email="cookie-admin@example.edu",
+        full_name="Cookie Admin",
+        password_hash=hash_password("Cookie test password 2026!"),
+        role=UserRole.ADMIN,
+        is_active=True,
+    )
+    api_database.add(user)
+    api_database.commit()
+    monkeypatch.setattr("app.api.auth.router.settings.env", "production")
+    monkeypatch.setattr("app.api.auth.router.settings.cookie_samesite", "none")
+
+    with TestClient(app, base_url="https://testserver") as client:
+        response = client.post(
+            "/api/auth/login",
+            json={"email": user.email, "password": "Cookie test password 2026!"},
+        )
+
+    assert response.status_code == 200
+    cookie = response.headers.get("set-cookie", "").lower()
+    assert "httponly" in cookie
+    assert "secure" in cookie
+    assert "samesite=none" in cookie

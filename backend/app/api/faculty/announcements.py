@@ -16,9 +16,15 @@ Faculty = Depends(require_roles(UserRole.FACULTY.value))
 
 
 @router.get("", response_model=list[AnnouncementResponse])
-def list_announcements(faculty: User = Faculty, db: Session = Depends(get_db)) -> list[Announcement]:
+def list_announcements(
+    faculty: User = Faculty, db: Session = Depends(get_db)
+) -> list[Announcement]:
     return list(
-        db.scalars(select(Announcement).where(Announcement.faculty_id == faculty.id).order_by(Announcement.created_at.desc()))
+        db.scalars(
+            select(Announcement)
+            .where(Announcement.faculty_id == faculty.id)
+            .order_by(Announcement.created_at.desc())
+        )
     )
 
 
@@ -35,7 +41,14 @@ def create_announcement(
     db.add(announcement)
     try:
         db.flush()
-        record_audit(db, actor_id=faculty.id, action="CREATE", resource_type="announcement", resource_id=str(announcement.id), after={"allocation_id": str(allocation.id), "title": announcement.title})
+        record_audit(
+            db,
+            actor_id=faculty.id,
+            action="CREATE",
+            resource_type="announcement",
+            resource_id=str(announcement.id),
+            after={"allocation_id": str(allocation.id), "title": announcement.title},
+        )
         db.commit()
     except IntegrityError:
         db.rollback()

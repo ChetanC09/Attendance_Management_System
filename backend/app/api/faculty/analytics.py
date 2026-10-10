@@ -7,8 +7,8 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.dependencies.auth import require_roles
 from app.models.academic import Course, CourseAllocation, Section
-from app.models.audit import SystemSetting
 from app.models.attendance import Attendance, AttendanceStatus
+from app.models.audit import SystemSetting
 from app.models.timetable import Lecture
 from app.models.user import User, UserRole
 from app.schemas.analytics import Defaulter
@@ -27,7 +27,15 @@ def allocations(faculty: User = Faculty, db: Session = Depends(get_db)) -> list[
         .where(CourseAllocation.faculty_id == faculty.id, CourseAllocation.is_active.is_(True))
         .order_by(Course.code, Section.name)
     ).all()
-    return [{"allocation_id": row[0], "course_code": row[1], "course_name": row[2], "section_name": row[3]} for row in rows]
+    return [
+        {
+            "allocation_id": row[0],
+            "course_code": row[1],
+            "course_name": row[2],
+            "section_name": row[3],
+        }
+        for row in rows
+    ]
 
 
 @router.get("/trend")
@@ -41,7 +49,9 @@ def attendance_trend(
         raise HTTPException(404, "Course allocation not found")
     if allocation.faculty_id != faculty.id:
         raise HTTPException(403, "You are not assigned to this course")
-    attended = func.sum(case((Attendance.status.in_([AttendanceStatus.PRESENT, AttendanceStatus.LATE]), 1), else_=0))
+    attended = func.sum(
+        case((Attendance.status.in_([AttendanceStatus.PRESENT, AttendanceStatus.LATE]), 1), else_=0)
+    )
     rows = db.execute(
         select(Lecture.id, Lecture.starts_at, func.count(Attendance.id), attended)
         .outerjoin(Attendance, Attendance.lecture_id == Lecture.id)
@@ -51,8 +61,13 @@ def attendance_trend(
         .limit(30)
     ).all()
     return [
-        {"lecture_id": row[0], "starts_at": row[1].isoformat(), "recorded": row[2],
-         "attended": int(row[3] or 0), "attendance_percentage": round(int(row[3] or 0) / row[2] * 100, 1) if row[2] else 0.0}
+        {
+            "lecture_id": row[0],
+            "starts_at": row[1].isoformat(),
+            "recorded": row[2],
+            "attended": int(row[3] or 0),
+            "attendance_percentage": round(int(row[3] or 0) / row[2] * 100, 1) if row[2] else 0.0,
+        }
         for row in reversed(rows)
     ]
 

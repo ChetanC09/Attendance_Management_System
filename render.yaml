@@ -15,7 +15,7 @@ services:
     region: singapore
     dockerfilePath: ./backend/Dockerfile
     dockerContext: ./backend
-    dockerCommand: sh -c 'alembic upgrade head && exec uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}'
+    dockerCommand: sh -c 'alembic upgrade head && exec python -m app.server'
     healthCheckPath: /health/ready
     envVars:
       - key: AMS_ENV
@@ -26,6 +26,12 @@ services:
         fromDatabase:
           name: ams-db
           property: connectionString
+      - key: AMS_DATABASE_POOL_SIZE
+        value: "5"
+      - key: AMS_DATABASE_MAX_OVERFLOW
+        value: "10"
+      - key: AMS_HTTP_REQUEST_CONCURRENCY
+        value: "15"
       - key: AMS_SECRET_KEY
         generateValue: true
       - key: AMS_COOKIE_SAMESITE
@@ -56,6 +62,12 @@ services:
         sync: false
       - key: AMS_SMTP_FROM_EMAIL
         sync: false
+      - key: AMS_TWILIO_ACCOUNT_SID
+        sync: false
+      - key: AMS_TWILIO_AUTH_TOKEN
+        sync: false
+      - key: AMS_TWILIO_FROM_NUMBER
+        sync: false
 
   - type: worker
     name: ams-notifications
@@ -72,18 +84,97 @@ services:
         fromDatabase:
           name: ams-db
           property: connectionString
+      - key: AMS_DATABASE_POOL_SIZE
+        value: "5"
+      - key: AMS_DATABASE_MAX_OVERFLOW
+        value: "10"
       - key: AMS_SECRET_KEY
         fromService:
           type: web
           name: ams-api
           envVarKey: AMS_SECRET_KEY
+      - key: AMS_COOKIE_SAMESITE
+        fromService:
+          type: web
+          name: ams-api
+          envVarKey: AMS_COOKIE_SAMESITE
+      - key: AMS_CORS_ORIGINS
+        fromService:
+          type: web
+          name: ams-api
+          envVarKey: AMS_CORS_ORIGINS
+      - key: AMS_FRONTEND_BASE_URL
+        fromService:
+          type: web
+          name: ams-api
+          envVarKey: AMS_FRONTEND_BASE_URL
+      - key: AMS_STORAGE_BACKEND
+        fromService:
+          type: web
+          name: ams-api
+          envVarKey: AMS_STORAGE_BACKEND
+      - key: AMS_S3_BUCKET
+        fromService:
+          type: web
+          name: ams-api
+          envVarKey: AMS_S3_BUCKET
+      - key: AMS_S3_REGION
+        fromService:
+          type: web
+          name: ams-api
+          envVarKey: AMS_S3_REGION
+      - key: AMS_S3_ENDPOINT_URL
+        fromService:
+          type: web
+          name: ams-api
+          envVarKey: AMS_S3_ENDPOINT_URL
+      - key: AMS_S3_ACCESS_KEY_ID
+        fromService:
+          type: web
+          name: ams-api
+          envVarKey: AMS_S3_ACCESS_KEY_ID
+      - key: AMS_S3_SECRET_ACCESS_KEY
+        fromService:
+          type: web
+          name: ams-api
+          envVarKey: AMS_S3_SECRET_ACCESS_KEY
       - key: AMS_SMTP_HOST
-        sync: false
+        fromService:
+          type: web
+          name: ams-api
+          envVarKey: AMS_SMTP_HOST
       - key: AMS_SMTP_PORT
-        value: "587"
+        fromService:
+          type: web
+          name: ams-api
+          envVarKey: AMS_SMTP_PORT
       - key: AMS_SMTP_USERNAME
-        sync: false
+        fromService:
+          type: web
+          name: ams-api
+          envVarKey: AMS_SMTP_USERNAME
       - key: AMS_SMTP_PASSWORD
-        sync: false
+        fromService:
+          type: web
+          name: ams-api
+          envVarKey: AMS_SMTP_PASSWORD
       - key: AMS_SMTP_FROM_EMAIL
-        sync: false
+        fromService:
+          type: web
+          name: ams-api
+          envVarKey: AMS_SMTP_FROM_EMAIL
+      - key: AMS_TWILIO_ACCOUNT_SID
+        fromService:
+          type: web
+          name: ams-api
+          envVarKey: AMS_TWILIO_ACCOUNT_SID
+      - key: AMS_TWILIO_AUTH_TOKEN
+        fromService:
+          type: web
+          name: ams-api
+          envVarKey: AMS_TWILIO_AUTH_TOKEN
+      - key: AMS_TWILIO_FROM_NUMBER
+        fromService:
+          type: web
+          name: ams-api
+          envVarKey: AMS_TWILIO_FROM_NUMBER
