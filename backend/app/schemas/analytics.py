@@ -51,3 +51,16 @@ class AttendanceHistoryItem(BaseModel):
     course_name: str
     starts_at: str
     status: str | None
+
+
+class StudentTimetableItem(BaseModel):
+    id: uuid.UUID
+    allocation_id: uuid.UUID | None = None
+    weekday: int
+    starts_at: str
+    ends_at: str
+    course_code: str
+    course_name: str
+    classroom_code: str
+    classroom_name: str
+    faculty_name: str

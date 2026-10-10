@@ -9,8 +9,11 @@ from app.core.config import settings
 from app.core.database import get_db
 from app.dependencies.auth import require_roles
 from app.models.attendance import Attendance, AttendanceSession, AttendanceSource, AttendanceStatus
+from app.models.academic import CourseAllocation, StudentProfile
 from app.models.user import User, UserRole
+from app.models.timetable import Lecture
 from app.schemas.attendance import (
+    AttendanceRosterItem,
     AttendanceResponse,
     AttendanceSessionDetail,
     AttendanceSessionResponse,
@@ -61,6 +64,31 @@ def read_session(session_id: UUID, faculty: User = Faculty, db: Session = Depend
     return {**AttendanceSessionResponse.model_validate(session).model_dump(), "records": records}
 
 
+@router.get("/session/{session_id}/roster", response_model=list[AttendanceRosterItem])
+def session_roster(session_id: UUID, faculty: User = Faculty, db: Session = Depends(get_db)) -> list[dict]:
+    try:
+        session = get_authorized_session(db, faculty, session_id)
+    except AttendanceRuleError as error:
+        _raise_rule(error)
+    lecture = db.get(Lecture, session.lecture_id)
+    if not lecture:
+        raise HTTPException(404, "Lecture not found")
+    rows = db.execute(
+        select(User, Attendance)
+        .join(StudentProfile, StudentProfile.user_id == User.id)
+        .join(CourseAllocation, CourseAllocation.section_id == StudentProfile.section_id)
+        .outerjoin(Attendance, (Attendance.student_id == User.id) & (Attendance.lecture_id == session.lecture_id))
+        .where(CourseAllocation.id == lecture.allocation_id, User.is_active.is_(True))
+        .order_by(User.institutional_id)
+    ).all()
+    return [
+        {"student_id": user.id, "institutional_id": user.institutional_id, "full_name": user.full_name,
+         "attendance_id": mark.id if mark else None, "status": mark.status if mark else None,
+         "source": mark.source if mark else None, "reason": mark.reason if mark else None}
+        for user, mark in rows
+    ]
+
+
 @router.post("/manual", response_model=AttendanceResponse, status_code=201)
 async def manual_attendance(
     payload: ManualAttendanceRequest, faculty: User = Faculty, db: Session = Depends(get_db)
@@ -84,14 +112,20 @@ async def manual_attendance(
 
 
 @router.patch("/{attendance_id}", response_model=AttendanceResponse)
-def update_attendance(
+async def update_attendance(
     attendance_id: UUID,
     payload: AttendanceUpdateRequest,
     faculty: User = Faculty,
     db: Session = Depends(get_db),
 ) -> Attendance:
     try:
-        return modify_attendance(db, faculty, attendance_id, payload.status, payload.reason)
+        row = modify_attendance(db, faculty, attendance_id, payload.status, payload.reason)
+        if row.session_id:
+            await attendance_connections.broadcast(
+                row.session_id,
+                {"type": "ATTENDANCE_RECORDED", "attendance_id": str(row.id), "student_id": str(row.student_id)},
+            )
+        return row
     except AttendanceRuleError as error:
         _raise_rule(error)
 

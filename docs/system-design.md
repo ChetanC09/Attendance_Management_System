@@ -466,6 +466,7 @@ Supports:
 - cancellation
 - rescheduling
 - conflict detection
+- faculty announcements scoped to assigned course allocations
 
 The SRS requires faculty and classroom conflict prevention. fileciteturn0file3L485-L524
 

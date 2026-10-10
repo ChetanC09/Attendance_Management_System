@@ -7,10 +7,11 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.dependencies.auth import require_roles
-from app.models.academic import CourseAllocation
+from app.models.academic import Classroom, Course, CourseAllocation
 from app.models.timetable import Lecture, TimetableEntry
 from app.models.user import User, UserRole
 from app.schemas.academic import LectureResponse, TimetableEntryResponse
+from app.schemas.analytics import StudentTimetableItem
 
 router = APIRouter(prefix="/faculty", tags=["faculty timetable"])
 Faculty = Depends(require_roles(UserRole.FACULTY.value))
@@ -27,6 +28,24 @@ def get_timetable(faculty: User = Faculty, db: Session = Depends(get_db)) -> lis
             .order_by(TimetableEntry.weekday, TimetableEntry.starts_at)
         )
     )
+
+
+@router.get("/timetable/overview", response_model=list[StudentTimetableItem])
+def timetable_overview(faculty: User = Faculty, db: Session = Depends(get_db)) -> list[dict]:
+    rows = db.execute(
+        select(TimetableEntry, Course, Classroom)
+        .join(CourseAllocation, CourseAllocation.id == TimetableEntry.allocation_id)
+        .join(Course, Course.id == CourseAllocation.course_id)
+        .join(Classroom, Classroom.id == TimetableEntry.classroom_id)
+        .where(CourseAllocation.faculty_id == faculty.id, CourseAllocation.is_active.is_(True), TimetableEntry.is_active.is_(True))
+        .order_by(TimetableEntry.weekday, TimetableEntry.starts_at)
+    ).all()
+    return [
+        {"id": entry.id, "allocation_id": entry.allocation_id, "weekday": entry.weekday, "starts_at": entry.starts_at.isoformat(),
+         "ends_at": entry.ends_at.isoformat(), "course_code": course.code, "course_name": course.name,
+         "classroom_code": classroom.code, "classroom_name": classroom.name, "faculty_name": faculty.full_name}
+        for entry, course, classroom in rows
+    ]
 
 
 @router.get("/lectures/today", response_model=list[LectureResponse])

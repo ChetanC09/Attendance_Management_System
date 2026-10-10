@@ -6,10 +6,10 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.dependencies.auth import require_roles
-from app.models.academic import Course, CourseAllocation, StudentProfile
+from app.models.academic import Classroom, Course, CourseAllocation, StudentProfile
 from app.models.attendance import Attendance
 from app.models.audit import SystemSetting
-from app.models.timetable import Lecture
+from app.models.timetable import Lecture, TimetableEntry
 from app.models.user import User, UserRole
 from app.schemas.analytics import (
     AttendanceHistoryItem,
@@ -17,6 +17,7 @@ from app.schemas.analytics import (
     CourseAttendanceSummary,
     OverallAttendanceSummary,
     RecoveryPlan,
+    StudentTimetableItem,
 )
 from app.services.analytics import course_counts
 from app.services.analytics_math import projected_attendance, recovery_plan
@@ -32,6 +33,44 @@ def attendance_summary(
     db: Session = Depends(get_db),
 ) -> list[dict]:
     return course_counts(db, student.id, course_id)
+
+
+@router.get("/attendance/threshold")
+def attendance_threshold(_: User = Student, db: Session = Depends(get_db)) -> dict[str, float]:
+    setting = db.get(SystemSetting, "attendance_threshold")
+    return {"attendance_threshold": float(setting.value["percentage"]) if setting else 75.0}
+
+
+@router.get("/timetable", response_model=list[StudentTimetableItem])
+def student_timetable(student: User = Student, db: Session = Depends(get_db)) -> list[dict]:
+    section_id = select(StudentProfile.section_id).where(StudentProfile.user_id == student.id).scalar_subquery()
+    rows = db.execute(
+        select(TimetableEntry, Course, Classroom, User)
+        .join(CourseAllocation, CourseAllocation.id == TimetableEntry.allocation_id)
+        .join(Course, Course.id == CourseAllocation.course_id)
+        .join(Classroom, Classroom.id == TimetableEntry.classroom_id)
+        .join(User, User.id == CourseAllocation.faculty_id)
+        .where(
+            CourseAllocation.section_id == section_id,
+            CourseAllocation.is_active.is_(True),
+            TimetableEntry.is_active.is_(True),
+        )
+        .order_by(TimetableEntry.weekday, TimetableEntry.starts_at)
+    ).all()
+    return [
+        {
+            "id": entry.id,
+            "weekday": entry.weekday,
+            "starts_at": entry.starts_at.isoformat(),
+            "ends_at": entry.ends_at.isoformat(),
+            "course_code": course.code,
+            "course_name": course.name,
+            "classroom_code": classroom.code,
+            "classroom_name": classroom.name,
+            "faculty_name": faculty.full_name,
+        }
+        for entry, course, classroom, faculty in rows
+    ]
 
 
 @router.get("/analytics/overall", response_model=OverallAttendanceSummary)

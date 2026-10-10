@@ -1,0 +1,172 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+
+  --color-primary: #ff5722;
+  --color-primary-dark: #b83200;
+  --color-primary-light: #ff8a65;
+  --color-primary-container: #fff0e9;
+  --color-primary-fixed: #ffd8ca;
+  --color-primary-fixed-dim: #ffb69d;
+
+  --color-surface: #fffaf8;
+  --color-surface-dim: #f4ebe7;
+  --color-surface-bright: #ffffff;
+  --color-surface-container: #ffffff;
+  --color-surface-container-low: #fffaf8;
+  --color-surface-container-lowest: #ffffff;
+  --color-surface-container-high: #f4ebe7;
+  --color-surface-container-highest: #e9dcd6;
+  --color-on-surface: #24201e;
+  --color-on-surface-variant: #6f625d;
+  --color-outline: #a9978f;
+  --color-outline-variant: #e8dcd6;
+  --color-tertiary: #ff8a65;
+  --color-tertiary-container: #fff0e9;
+
+  /* Compatibility palette for existing Tailwind utility classes. */
+  --color-blue-50: #fff0e9;
+  --color-blue-100: #ffe2d7;
+  --color-blue-200: #ffc7b2;
+  --color-blue-300: #ffa88b;
+  --color-blue-400: #ff8a65;
+  --color-blue-500: #f56a39;
+  --color-blue-600: #d94816;
+  --color-blue-700: #b83200;
+  --color-blue-800: #8f2b08;
+  --color-blue-900: #63240f;
+  --color-blue-950: #3d1a10;
+
+  --color-slate-50: #fffaf8;
+  --color-slate-100: #f7f0ed;
+  --color-slate-200: #eadfda;
+  --color-slate-300: #d8c9c2;
+  --color-slate-400: #aa9890;
+  --color-slate-500: #81716a;
+  --color-slate-600: #655750;
+  --color-slate-700: #4b403b;
+  --color-slate-800: #342d2a;
+  --color-slate-900: #24201e;
+  --color-slate-950: #171412;
+
+  --color-stone-50: #fffaf8;
+  --color-stone-100: #f7f0ed;
+  --color-stone-200: #eadfda;
+  --color-stone-300: #d8c9c2;
+  --color-stone-400: #aa9890;
+  --color-stone-500: #81716a;
+  --color-stone-600: #655750;
+  --color-stone-700: #4b403b;
+  --color-stone-800: #342d2a;
+  --color-stone-900: #24201e;
+  --color-stone-950: #171412;
+}
+
+:root {
+  font-family: var(--font-sans);
+  color: #24201e;
+  background: #fffaf8;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-optical-sizing: auto;
+  font-weight: 400;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  min-width: 320px;
+  min-height: 100vh;
+  margin: 0;
+  background: #fffaf8;
+  color: #24201e;
+}
+
+button, input, select, textarea { font: inherit; }
+button { cursor: pointer; }
+button:disabled { cursor: not-allowed; }
+
+:focus-visible {
+  outline: 3px solid #ff8a65;
+  outline-offset: 2px;
+}
+
+::selection { background: #ffd8ca; color: #3d1a10; }
+
+.ams-shell { min-height: 100vh; background: #fffaf8; }
+.ams-sidebar {
+  position: fixed;
+  inset: 0 auto 0 0;
+  z-index: 50;
+  display: flex;
+  width: 258px;
+  flex-direction: column;
+  border-right: 1px solid #eadfda;
+  background: #fff;
+  transform: translateX(-100%);
+  transition: transform 180ms ease;
+}
+.ams-sidebar-open { transform: translateX(0); }
+.ams-backdrop { position: fixed; inset: 0; z-index: 40; border: 0; background: rgb(36 32 30 / 38%); }
+.ams-brand { display: flex; min-height: 78px; align-items: center; justify-content: space-between; padding: 16px 18px; border-bottom: 1px solid #f0e8e4; }
+.ams-brand-button { display: flex; min-width: 0; align-items: center; gap: 11px; border: 0; background: transparent; text-align: left; }
+.ams-brand-mark { display: grid; width: 38px; height: 38px; flex: 0 0 auto; place-items: center; border-radius: 12px; background: #ff5722; color: white; }
+.ams-brand-button > span:last-child, .ams-user-copy { display: flex; min-width: 0; flex-direction: column; }
+.ams-brand-name { color: #24201e; font-size: 13px; font-weight: 700; letter-spacing: -.02em; }
+.ams-brand-subtitle { margin-top: 3px; color: #81716a; font-size: 10px; }
+.ams-navigation-label { padding: 21px 18px 9px; color: #8c7b73; font-family: var(--font-mono); font-size: 10px; font-weight: 600; letter-spacing: .09em; text-transform: uppercase; }
+.ams-navigation { display: grid; gap: 4px; padding: 0 10px; }
+.ams-nav-item { display: flex; min-height: 42px; align-items: center; gap: 11px; padding: 9px 11px; border: 0; border-radius: 9px; background: transparent; color: #655750; font-size: 12px; font-weight: 500; text-align: left; transition: background 140ms ease, color 140ms ease; }
+.ams-nav-item:hover { background: #fff6f2; color: #8f2b08; }
+.ams-nav-item-active { background: #fff0e9; color: #b83200; font-weight: 650; }
+.ams-nav-count { display: grid; min-width: 20px; height: 20px; margin-left: auto; place-items: center; border-radius: 999px; background: #ff5722; color: #fff; font-size: 10px; }
+.ams-sidebar-bottom { margin-top: auto; padding: 12px; }
+.ams-demo-note { padding: 8px 10px 10px; color: #8c7b73; font-size: 10px; }
+.ams-user-row { display: flex; align-items: center; gap: 9px; padding: 10px; border: 1px solid #eadfda; border-radius: 11px; background: #fffaf8; }
+.ams-avatar { display: grid; width: 32px; height: 32px; flex: 0 0 auto; place-items: center; border-radius: 50%; background: #ffe2d7; color: #8f2b08; font-family: var(--font-mono); font-size: 10px; font-weight: 700; }
+.ams-user-copy { flex: 1; overflow: hidden; line-height: 1.4; }
+.ams-user-name { overflow: hidden; color: #342d2a; font-size: 11px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
+.ams-user-id { overflow: hidden; color: #81716a; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.ams-icon-button { position: relative; display: inline-grid; width: 36px; height: 36px; flex: 0 0 auto; place-items: center; border: 0; border-radius: 9px; background: transparent; color: #655750; }
+.ams-icon-button:hover { background: #f7f0ed; color: #342d2a; }
+.ams-sidebar-close { margin-left: 6px; }
+.ams-workspace { min-height: 100vh; }
+.ams-topbar { position: sticky; top: 0; z-index: 30; display: flex; min-height: 62px; align-items: center; justify-content: space-between; gap: 12px; padding: 0 18px; border-bottom: 1px solid #eadfda; background: rgb(255 255 255 / 96%); }
+.ams-topbar-title, .ams-topbar-actions { display: flex; min-width: 0; align-items: center; gap: 11px; }
+.ams-crumb-root { color: #655750; font-size: 11px; font-weight: 600; }
+.ams-crumb-divider { color: #c0afa7; font-size: 12px; }
+.ams-crumb-current { overflow: hidden; color: #b83200; font-size: 11px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
+.ams-preview-label { color: #81716a; font-size: 10px; }
+.ams-role-select { min-width: 112px; padding: 7px 27px 7px 10px !important; font-size: 11px !important; }
+.ams-notification-dot { position: absolute; top: 7px; right: 7px; width: 7px; height: 7px; border: 1px solid white; border-radius: 50%; background: #d94816; }
+.ams-main { min-height: calc(100vh - 62px); padding: 24px clamp(16px, 3vw, 40px) 40px; }
+
+@media (min-width: 1024px) {
+  .ams-sidebar { transform: translateX(0); }
+  .ams-workspace { margin-left: 258px; }
+  .ams-topbar { padding-inline: 28px; }
+}
+
+@media (max-width: 540px) {
+  .ams-topbar { padding-inline: 10px; }
+  .ams-topbar-title, .ams-topbar-actions { gap: 6px; }
+  .ams-crumb-root, .ams-crumb-divider, .ams-preview-label { display: none; }
+  .ams-role-select { min-width: 105px; }
+  .ams-main { padding: 18px 14px 30px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+}
+
+/* Legacy generated pages use these aliases; keep their existing layout while
+   bringing color utility classes into the shared Solaris palette. */
+.material-symbols-outlined { font-family: 'Material Symbols Outlined'; font-weight: normal; font-style: normal; font-size: 20px; line-height: 1; letter-spacing: normal; text-transform: none; display: inline-block; white-space: nowrap; direction: ltr; -webkit-font-feature-settings: 'liga'; -webkit-font-smoothing: antialiased; }
+::-webkit-scrollbar { width: 7px; height: 7px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { border-radius: 999px; background: #d8c9c2; }
+::-webkit-scrollbar-thumb:hover { background: #aa9890; }

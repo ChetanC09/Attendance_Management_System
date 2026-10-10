@@ -1,0 +1,89 @@
+databases:
+  - name: ams-db
+    databaseName: ams
+    user: ams
+    plan: basic-256mb
+    region: singapore
+    postgresMajorVersion: "16"
+    ipAllowList: []
+
+services:
+  - type: web
+    name: ams-api
+    runtime: docker
+    plan: 0.5c-512mb
+    region: singapore
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    dockerCommand: sh -c 'alembic upgrade head && exec uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}'
+    healthCheckPath: /health/ready
+    envVars:
+      - key: AMS_ENV
+        value: production
+      - key: AMS_API_PREFIX
+        value: /api
+      - key: AMS_DATABASE_URL
+        fromDatabase:
+          name: ams-db
+          property: connectionString
+      - key: AMS_SECRET_KEY
+        generateValue: true
+      - key: AMS_COOKIE_SAMESITE
+        value: none
+      - key: AMS_CORS_ORIGINS
+        sync: false
+      - key: AMS_FRONTEND_BASE_URL
+        sync: false
+      - key: AMS_STORAGE_BACKEND
+        value: s3
+      - key: AMS_S3_BUCKET
+        sync: false
+      - key: AMS_S3_REGION
+        sync: false
+      - key: AMS_S3_ENDPOINT_URL
+        sync: false
+      - key: AMS_S3_ACCESS_KEY_ID
+        sync: false
+      - key: AMS_S3_SECRET_ACCESS_KEY
+        sync: false
+      - key: AMS_SMTP_HOST
+        sync: false
+      - key: AMS_SMTP_PORT
+        value: "587"
+      - key: AMS_SMTP_USERNAME
+        sync: false
+      - key: AMS_SMTP_PASSWORD
+        sync: false
+      - key: AMS_SMTP_FROM_EMAIL
+        sync: false
+
+  - type: worker
+    name: ams-notifications
+    runtime: docker
+    plan: 0.5c-512mb
+    region: singapore
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    dockerCommand: python -m app.workers.run
+    envVars:
+      - key: AMS_ENV
+        value: production
+      - key: AMS_DATABASE_URL
+        fromDatabase:
+          name: ams-db
+          property: connectionString
+      - key: AMS_SECRET_KEY
+        fromService:
+          type: web
+          name: ams-api
+          envVarKey: AMS_SECRET_KEY
+      - key: AMS_SMTP_HOST
+        sync: false
+      - key: AMS_SMTP_PORT
+        value: "587"
+      - key: AMS_SMTP_USERNAME
+        sync: false
+      - key: AMS_SMTP_PASSWORD
+        sync: false
+      - key: AMS_SMTP_FROM_EMAIL
+        sync: false

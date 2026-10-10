@@ -50,7 +50,7 @@ def login(
         create_access_token(user.id, auth_session.id, expires_at),
         httponly=True,
         secure=settings.env != "development",
-        samesite="lax",
+        samesite=settings.cookie_samesite,
         max_age=settings.access_token_minutes * 60,
         path="/",
     )
@@ -78,7 +78,7 @@ def logout(request: Request, response: Response, db: Session = Depends(get_db)) 
                 )
                 db.commit()
     response.delete_cookie(
-        COOKIE_NAME, path="/", httponly=True, secure=settings.env != "development", samesite="lax"
+        COOKIE_NAME, path="/", httponly=True, secure=settings.env != "development", samesite=settings.cookie_samesite
     )
     return response
 
@@ -100,7 +100,7 @@ def change_password_endpoint(
     except InvalidCredentials:
         raise HTTPException(status_code=400, detail="Current password is incorrect") from None
     response.delete_cookie(
-        COOKIE_NAME, path="/", httponly=True, secure=settings.env != "development", samesite="lax"
+        COOKIE_NAME, path="/", httponly=True, secure=settings.env != "development", samesite=settings.cookie_samesite
     )
     return response
 

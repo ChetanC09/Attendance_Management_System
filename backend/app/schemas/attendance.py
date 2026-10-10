@@ -48,3 +48,13 @@ class AttendanceUpdateRequest(BaseModel):
 
 class AttendanceSessionDetail(AttendanceSessionResponse):
     records: list[AttendanceResponse]
+
+
+class AttendanceRosterItem(BaseModel):
+    student_id: uuid.UUID
+    institutional_id: str
+    full_name: str
+    attendance_id: uuid.UUID | None
+    status: AttendanceStatus | None
+    source: AttendanceSource | None
+    reason: str | None

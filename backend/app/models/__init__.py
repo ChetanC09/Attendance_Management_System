@@ -9,6 +9,7 @@ from app.models.academic import (
     Semester,
     StudentProfile,
 )
+from app.models.announcements import Announcement
 from app.models.attendance import (
     Attendance,
     AttendanceSession,
@@ -32,6 +33,7 @@ from app.models.user import AuthSession, PasswordResetToken, User, UserRole
 
 __all__ = [
     "AcademicYear",
+    "Announcement",
     "Attendance",
     "AttendanceSession",
     "AttendanceSessionStatus",

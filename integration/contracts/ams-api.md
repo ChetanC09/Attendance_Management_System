@@ -56,6 +56,8 @@ API prefix: `/api`. JSON requests/responses use Pydantic validation. Authenticat
 
 ## Student
 
+| GET | `/api/student/attendance/threshold` | Configured attendance threshold for the signed-in student |
+
 | Method | Path | Purpose |
 |---|---|---|
 | GET | `/api/student/attendance` | Course attendance summaries; optional `course_id` |

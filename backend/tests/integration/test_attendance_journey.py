@@ -66,6 +66,7 @@ def test_admin_to_student_regularization_journey(api_database: Session, monkeypa
             json={"email": admin.email, "password": "Admin password 2026!"},
         )
         assert login.status_code == 200
+        assert admin_client.get("/api/student/attendance/threshold").status_code == 403
 
         department_response = admin_client.post(
             "/api/admin/departments", json={"code": "CSE", "name": "Computer Science"}
@@ -225,6 +226,9 @@ def test_admin_to_student_regularization_journey(api_database: Session, monkeypa
                     json={"email": "student@example.edu", "password": "Student password 2026!"},
                 )
                 assert student_login.status_code == 200
+                threshold_response = student_client.get("/api/student/attendance/threshold")
+                assert threshold_response.status_code == 200
+                assert threshold_response.json() == {"attendance_threshold": 75.0}
                 request_response = student_client.post(
                     "/api/student/requests",
                     json={

@@ -1,0 +1,6 @@
+{
+  "name": "AMS Portal - Attendance Management System",
+  "description": "Institutional attendance management system for engineering colleges featuring on-device facial recognition, Ordinance 12-B statutory audits, and faculty governance.",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -30,6 +30,7 @@ API prefix: `/api`. JSON requests/responses use Pydantic validation. Authenticat
 | POST | `/api/admin/lectures/{id}/cancel` | Cancel a scheduled lecture with reason |
 | PATCH | `/api/admin/lectures/{id}/reschedule` | Change scheduled lecture time/classroom |
 | GET/POST/PATCH | `/api/admin/users[/{id}]` | Account list/create/status/profile update |
+| GET | `/api/admin/overview` | Operational totals, attendance rate, pending requests, open sessions, and low-attendance course records |
 | GET/PUT | `/api/admin/settings/attendance-threshold` | Attendance threshold |
 | GET/PUT | `/api/admin/settings/notifications` | Enable configured SMTP/Twilio delivery channels |
 | GET | `/api/admin/audit-logs` | Filterable audit history |
@@ -39,27 +40,36 @@ API prefix: `/api`. JSON requests/responses use Pydantic validation. Authenticat
 | Method | Path | Purpose |
 |---|---|---|
 | GET | `/api/faculty/timetable` | Authorized recurring schedule |
+| GET | `/api/faculty/timetable/overview` | Authorized schedule with course/classroom details and allocation IDs |
 | GET | `/api/faculty/lectures/today` | Today's assigned lectures |
 | POST | `/api/faculty/attendance/session` | Open a lecture attendance session |
 | GET | `/api/faculty/attendance/session/{id}` | Session and marks |
+| GET | `/api/faculty/attendance/session/{id}/roster` | Active students in the session section and their current marks |
 | POST | `/api/faculty/attendance/manual` | Mark a student in the active section |
 | PATCH | `/api/faculty/attendance/{id}` | Correct a mark; reason required |
 | POST | `/api/faculty/attendance/session/{id}/close` | Close and mark unmarked roster entries absent |
 | POST | `/api/faculty/attendance/session/{id}/recognize` | Submit one JPEG/PNG frame for recognition and attendance decision |
 | GET | `/api/faculty/analytics/defaulters?allocation_id=UUID&threshold=75` | Authorized allocation defaulters |
+| GET | `/api/faculty/analytics/allocations` | Faculty's active allocations with course and section labels |
+| GET | `/api/faculty/analytics/trend?allocation_id=UUID` | Up to 30 lecture attendance rates for an authorized allocation |
 | GET | `/api/faculty/requests` | Assigned requests |
 | POST | `/api/faculty/requests/{id}/approve` | Approve (regularization is transactional) |
 | POST | `/api/faculty/requests/{id}/reject` | Reject; reason required |
 | GET | `/api/faculty/requests/{id}` | Assigned request details |
 | GET | `/api/faculty/requests/{id}/documents` | List supporting document metadata |
 | GET | `/api/faculty/requests/documents/{id}` | Download assigned request document |
+| GET/POST | `/api/faculty/announcements` | List own course announcements / publish to an assigned allocation |
 
 ## Student
+
+| GET | `/api/student/attendance/threshold` | Student-scoped configured attendance threshold |
 
 | Method | Path | Purpose |
 |---|---|---|
 | GET | `/api/student/attendance` | Course attendance summaries; optional `course_id` |
-| GET | `/api/student/attendance/history` | Paginated history (`limit`, `offset`) |
+| GET | `/api/student/timetable` | Recurring timetable for the student's active section |
+| GET | `/api/student/announcements` | Announcements for the student's active section |
+| GET | `/api/student/attendance/history` | Paginated history (`limit`, `offset`), optionally filtered by `course_id` |
 | GET | `/api/student/analytics/recovery?course_id=UUID&target_percentage=75` | Recovery plan |
 | GET | `/api/student/analytics/projection?course_id=UUID&potential_absences=1` | Predictive attendance risk |
 | POST/GET | `/api/student/requests` | Create/list own leave or regularization requests |

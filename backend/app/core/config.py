@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     api_prefix: str = "/api"
     database_url: str = "postgresql+psycopg://ams:ams@localhost:5432/ams"
     secret_key: SecretStr = SecretStr("development-only-change-me-and-rotate-this-key")
+    cookie_samesite: str = "lax"
     access_token_minutes: int = 30
     cors_origins: list[str] = ["http://localhost:3000"]
     storage_backend: str = "local"
@@ -41,6 +42,24 @@ class Settings(BaseSettings):
         if value < 1:
             raise ValueError("access_token_minutes must be positive")
         return value
+
+    @field_validator("database_url", mode="before")
+    @classmethod
+    def add_psycopg_driver(cls, value: str) -> str:
+        # Render Postgres supplies postgresql://; this project uses psycopg 3.
+        if isinstance(value, str) and value.startswith(("postgres://", "postgresql://")):
+            return value.replace("postgres://", "postgresql+psycopg://", 1).replace(
+                "postgresql://", "postgresql+psycopg://", 1
+            )
+        return value
+
+    @field_validator("cookie_samesite")
+    @classmethod
+    def valid_cookie_samesite(cls, value: str) -> str:
+        normalized = value.lower()
+        if normalized not in {"lax", "strict", "none"}:
+            raise ValueError("AMS_COOKIE_SAMESITE must be lax, strict, or none")
+        return normalized
 
     @model_validator(mode="after")
     def require_deployment_secret(self) -> "Settings":
