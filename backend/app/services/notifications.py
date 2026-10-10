@@ -27,8 +27,8 @@ def enqueue_in_app_notification(
                     sent_at=datetime.now(UTC),
                 )
             )
-    except Exception:
-        logger.exception("Unable to enqueue in-app notification for user %s", user_id)
+    except Exception as error:
+        logger.warning("Unable to enqueue in-app notification (%s)", type(error).__name__)
 
 
 def create_notification(

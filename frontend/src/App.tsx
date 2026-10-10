@@ -20,12 +20,10 @@ import { RecoveryPlannerView } from './components/student/RecoveryPlannerView';
 import { FacultyOverviewView } from './components/faculty/FacultyOverviewView';
 import { FacultyMarkAttendanceView } from './components/faculty/FacultyMarkAttendanceView';
 import { FacultyApprovalsView } from './components/faculty/FacultyApprovalsView';
-import { StudentAttendanceTrackerView } from './components/faculty/StudentAttendanceTrackerView';
 
 // Admin Views
 import { AdminDashboardView } from './components/admin/AdminDashboardView';
 import { AdminGovernanceView } from './components/admin/AdminGovernanceView';
-import { DepartmentRosterView } from './components/admin/DepartmentRosterView';
 import { SystemLogsSettingsView } from './components/admin/SystemLogsSettingsView';
 import { AdminResourceManager } from './components/admin/AdminResourceManager';
 import { AdminUsersView } from './components/admin/AdminUsersView';

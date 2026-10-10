@@ -93,9 +93,11 @@ API prefix: `/api`. JSON requests/responses use Pydantic validation. Authenticat
 - `403`: role or resource scope denied.
 - `404`: resource does not exist or is outside the caller's visibility.
 - `409`: duplicate/conflicting state or database uniqueness conflict.
-- `413` / `415`: document/frame size or type rejected.
+- `413` / `415`: document/frame size or type rejected. Document uploads validate both declared type and PDF/PNG/JPEG file signature before storage.
 - `422`: request validation or business rule rejected.
 - `423`: account temporarily locked.
-- `503`: optional vision dependencies are unavailable.
+- `503`: database connection pool capacity is temporarily unavailable (`Retry-After: 1`), optional vision dependencies are unavailable, or configured document storage is unavailable. A database pool timeout is logged without SQL, request payload, or connection details.
+
+Manual attendance creates the attendance row and its audit record in the same database transaction. The audit row stores the acting faculty ID, attendance ID, lecture/session/student references, source, status, reason, and before/after state. WebSocket events are sent only to clients connected to that open session; the endpoint is `/ws/attendance/{session_id}` (outside the `/api` REST prefix) and requires the assigned faculty's active cookie session.
 
 All permission checks are enforced by the API. Lists use bounded limits where applicable. This document tracks the current backend baseline; update it with each endpoint contract change.

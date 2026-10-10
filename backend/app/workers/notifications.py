@@ -136,9 +136,11 @@ def process_notification_batch(
                 notification.last_error = None
                 notification.next_attempt_at = None
             except Exception as error:
-                notification.last_error = str(error)[:500]
+                notification.last_error = f"{type(error).__name__}: provider delivery failed"
                 logger.warning(
-                    "Notification %s delivery attempt failed: %s", notification.id, error
+                    "Notification %s delivery attempt failed (%s)",
+                    notification.id,
+                    type(error).__name__,
                 )
                 if notification.attempts >= MAX_ATTEMPTS:
                     notification.status = NotificationStatus.FAILED

@@ -1,8 +1,19 @@
 from functools import lru_cache
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from pydantic import SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+_DEVELOPMENT_SECRET = "development-only-change-me-and-rotate-this-key"
+
+
+def validate_deployment_secret(env: str, secret: str) -> None:
+    if env != "development" and (
+        len(secret) < 32
+        or secret in {_DEVELOPMENT_SECRET, "replace-this-with-a-long-random-secret"}
+    ):
+        raise ValueError("AMS_SECRET_KEY must contain at least 32 characters outside development")
 
 
 class Settings(BaseSettings):
@@ -13,7 +24,10 @@ class Settings(BaseSettings):
     env: str = "development"
     api_prefix: str = "/api"
     database_url: str = "postgresql+psycopg://ams:ams@localhost:5432/ams"
-    secret_key: SecretStr = SecretStr("development-only-change-me-and-rotate-this-key")
+    database_pool_size: int = 5
+    database_max_overflow: int = 10
+    http_request_concurrency: int = 15
+    secret_key: SecretStr = SecretStr(_DEVELOPMENT_SECRET)
     cookie_samesite: str = "lax"
     access_token_minutes: int = 30
     cors_origins: list[str] = ["http://localhost:3000"]
@@ -63,19 +77,60 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def require_deployment_secret(self) -> "Settings":
+        if self.env not in {"development", "production"}:
+            raise ValueError("AMS_ENV must be development or production")
         secret = self.secret_key.get_secret_value()
-        if self.env != "development" and (
-            len(secret) < 32 or secret == "replace-this-with-a-long-random-secret"
-        ):
-            raise ValueError(
-                "AMS_SECRET_KEY must contain at least 32 characters outside development"
-            )
+        validate_deployment_secret(self.env, secret)
         if self.storage_backend not in {"local", "s3"}:
             raise ValueError("AMS_STORAGE_BACKEND must be either local or s3")
         if self.storage_backend == "s3" and not (
             self.s3_bucket and self.s3_access_key_id and self.s3_secret_access_key
         ):
             raise ValueError("S3 storage requires bucket and access credentials")
+        if self.database_pool_size < 1 or self.database_max_overflow < 0:
+            raise ValueError("Database pool size must be positive and overflow cannot be negative")
+        if (
+            not 1
+            <= self.http_request_concurrency
+            <= (self.database_pool_size + self.database_max_overflow)
+        ):
+            raise ValueError("HTTP request concurrency cannot exceed the database pool capacity")
+        if self.env == "production":
+            if self.cookie_samesite != "none":
+                raise ValueError(
+                    "Production cross-origin sessions require AMS_COOKIE_SAMESITE=none"
+                )
+            if self.storage_backend != "s3":
+                raise ValueError("Production requires private S3-compatible document storage")
+            if not self.cors_origins:
+                raise ValueError("Production requires an exact HTTPS AMS_CORS_ORIGINS allowlist")
+            for origin in self.cors_origins:
+                parsed_origin = urlsplit(origin)
+                if (
+                    "*" in origin
+                    or origin != origin.strip()
+                    or parsed_origin.scheme != "https"
+                    or not parsed_origin.netloc
+                    or parsed_origin.hostname is None
+                    or parsed_origin.username is not None
+                    or parsed_origin.password is not None
+                    or parsed_origin.path
+                    or parsed_origin.query
+                    or parsed_origin.fragment
+                ):
+                    raise ValueError("Production CORS origins must be exact HTTPS origins")
+            parsed_frontend = urlsplit(self.frontend_base_url)
+            if (
+                parsed_frontend.scheme != "https"
+                or not parsed_frontend.netloc
+                or parsed_frontend.path
+                or parsed_frontend.query
+                or parsed_frontend.fragment
+                or self.frontend_base_url not in self.cors_origins
+            ):
+                raise ValueError(
+                    "Production AMS_FRONTEND_BASE_URL must be an exact origin in AMS_CORS_ORIGINS"
+                )
         return self
 
 

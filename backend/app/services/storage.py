@@ -3,6 +3,8 @@ import uuid
 from pathlib import Path
 from typing import Protocol
 
+import boto3
+
 from app.core.config import settings
 
 
@@ -10,6 +12,10 @@ class StorageService(Protocol):
     def upload(self, filename: str, content: bytes) -> str: ...
     def download(self, storage_key: str) -> bytes: ...
     def delete(self, storage_key: str) -> None: ...
+
+
+class StorageUnavailable(RuntimeError):
+    """Provider failure without exposing credentials or raw SDK error details."""
 
 
 class LocalStorageService:
@@ -49,13 +55,14 @@ class S3StorageService:
             or not settings.s3_secret_access_key
         ):
             raise RuntimeError("S3 object storage is not configured")
-        import boto3
-
         self.bucket = settings.s3_bucket
+        endpoint_url = settings.s3_endpoint_url
+        if endpoint_url is not None:
+            endpoint_url = endpoint_url.strip() or None
         self.client = boto3.client(
             "s3",
             region_name=settings.s3_region,
-            endpoint_url=settings.s3_endpoint_url,
+            endpoint_url=endpoint_url,
             aws_access_key_id=settings.s3_access_key_id,
             aws_secret_access_key=settings.s3_secret_access_key.get_secret_value(),
         )
@@ -75,15 +82,29 @@ class S3StorageService:
 
     def upload(self, filename: str, content: bytes) -> str:
         key = self._key(filename)
-        self.client.put_object(Bucket=self.bucket, Key=key, Body=content)
+        try:
+            self.client.put_object(Bucket=self.bucket, Key=key, Body=content)
+        except Exception as error:
+            raise StorageUnavailable("Object storage upload failed") from error
         return key
 
     def download(self, storage_key: str) -> bytes:
-        response = self.client.get_object(Bucket=self.bucket, Key=self._validated_key(storage_key))
-        return response["Body"].read()
+        key = self._validated_key(storage_key)
+        try:
+            response = self.client.get_object(Bucket=self.bucket, Key=key)
+            return response["Body"].read()
+        except Exception as error:
+            provider_code = getattr(error, "response", {}).get("Error", {}).get("Code")
+            if provider_code in {"NoSuchKey", "NotFound", "404"}:
+                raise FileNotFoundError("Document content is unavailable") from None
+            raise StorageUnavailable("Object storage download failed") from error
 
     def delete(self, storage_key: str) -> None:
-        self.client.delete_object(Bucket=self.bucket, Key=self._validated_key(storage_key))
+        key = self._validated_key(storage_key)
+        try:
+            self.client.delete_object(Bucket=self.bucket, Key=key)
+        except Exception as error:
+            raise StorageUnavailable("Object storage deletion failed") from error
 
 
 def get_storage_service() -> StorageService:

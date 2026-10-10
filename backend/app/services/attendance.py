@@ -113,6 +113,22 @@ def record_attendance(
     db.add(row)
     try:
         db.flush()
+        record_audit(
+            db,
+            actor_id=faculty.id,
+            action="CREATE",
+            resource_type="attendance",
+            resource_id=str(row.id),
+            after={
+                "student_id": str(student_id),
+                "lecture_id": str(lecture.id),
+                "session_id": str(session.id),
+                "status": attendance_status.value,
+                "source": source.value,
+                "reason": reason,
+            },
+            reason=reason,
+        )
         db.commit()
     except IntegrityError:
         db.rollback()

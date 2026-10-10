@@ -37,13 +37,26 @@ def timetable_overview(faculty: User = Faculty, db: Session = Depends(get_db)) -
         .join(CourseAllocation, CourseAllocation.id == TimetableEntry.allocation_id)
         .join(Course, Course.id == CourseAllocation.course_id)
         .join(Classroom, Classroom.id == TimetableEntry.classroom_id)
-        .where(CourseAllocation.faculty_id == faculty.id, CourseAllocation.is_active.is_(True), TimetableEntry.is_active.is_(True))
+        .where(
+            CourseAllocation.faculty_id == faculty.id,
+            CourseAllocation.is_active.is_(True),
+            TimetableEntry.is_active.is_(True),
+        )
         .order_by(TimetableEntry.weekday, TimetableEntry.starts_at)
     ).all()
     return [
-        {"id": entry.id, "allocation_id": entry.allocation_id, "weekday": entry.weekday, "starts_at": entry.starts_at.isoformat(),
-         "ends_at": entry.ends_at.isoformat(), "course_code": course.code, "course_name": course.name,
-         "classroom_code": classroom.code, "classroom_name": classroom.name, "faculty_name": faculty.full_name}
+        {
+            "id": entry.id,
+            "allocation_id": entry.allocation_id,
+            "weekday": entry.weekday,
+            "starts_at": entry.starts_at.isoformat(),
+            "ends_at": entry.ends_at.isoformat(),
+            "course_code": course.code,
+            "course_name": course.name,
+            "classroom_code": classroom.code,
+            "classroom_name": classroom.name,
+            "faculty_name": faculty.full_name,
+        }
         for entry, course, classroom in rows
     ]
 

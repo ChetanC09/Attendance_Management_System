@@ -14,8 +14,14 @@ Student = Depends(require_roles(UserRole.STUDENT.value))
 
 
 @router.get("", response_model=list[AnnouncementResponse])
-def list_announcements(student: User = Student, db: Session = Depends(get_db)) -> list[Announcement]:
-    section_id = select(StudentProfile.section_id).where(StudentProfile.user_id == student.id).scalar_subquery()
+def list_announcements(
+    student: User = Student, db: Session = Depends(get_db)
+) -> list[Announcement]:
+    section_id = (
+        select(StudentProfile.section_id)
+        .where(StudentProfile.user_id == student.id)
+        .scalar_subquery()
+    )
     statement = (
         select(Announcement)
         .join(CourseAllocation, CourseAllocation.id == Announcement.allocation_id)

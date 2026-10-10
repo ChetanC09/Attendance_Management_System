@@ -1,31 +1,5 @@
-import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
-import {
-  UserRole,
-  UserProfile,
-  CourseStanding,
-  TimetableSlot,
-  RegularizationRequest,
-  NotificationItem,
-  AttendanceRecord,
-  DepartmentStat,
-  GovernancePolicy,
-  ClassroomStudent,
-  EnrolledStudent,
-  AuditLogEntry,
-} from '../types';
-import {
-  currentUserProfiles,
-  initialCourseStandings,
-  initialTimetableSlots,
-  initialRegularizationRequests,
-  initialNotifications,
-  initialAttendanceRecords,
-  initialClassroomStudents,
-  initialDepartmentStats,
-  initialGovernancePolicy,
-  initialEnrolledStudents,
-  initialAuditLogs,
-} from '../data/mockData';
+import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
+import { UserRole, UserProfile, NotificationItem } from '../types';
 import { api, jsonBody, type ApiUser } from '../services/api';
 
 export interface ToastMessage {
@@ -37,7 +11,6 @@ export interface ToastMessage {
 
 interface AppContextType {
   currentRole: UserRole;
-  setCurrentRole: (role: UserRole) => void;
   currentUser: UserProfile;
   authenticated: boolean;
   checkingSession: boolean;
@@ -48,17 +21,7 @@ interface AppContextType {
   selectedRequestId: string | null;
   setSelectedRequestId: (id: string | null) => void;
 
-  // Data
-  courses: CourseStanding[];
-  timetable: TimetableSlot[];
-  regularizationRequests: RegularizationRequest[];
   notifications: NotificationItem[];
-  attendanceRecords: AttendanceRecord[];
-  classroomStudents: ClassroomStudent[];
-  departmentStats: DepartmentStat[];
-  governancePolicy: GovernancePolicy;
-  enrolledStudents: EnrolledStudent[];
-  auditLogs: AuditLogEntry[];
 
   // Actions
   addToast: (
@@ -71,43 +34,42 @@ interface AppContextType {
 
   markNotificationAsRead: (id: string) => void;
   markAllNotificationsAsRead: () => void;
-  submitRegularizationRequest: (req: Omit<RegularizationRequest, 'id' | 'filingDate' | 'status'>) => void;
-  approveRegularizationRequest: (id: string, comment?: string) => void;
-  rejectRegularizationRequest: (id: string, comment?: string) => void;
-
-  updateClassroomStudentStatus: (studentId: string, status: ClassroomStudent['attendanceStatus'], reason: string) => void;
-  updateGovernancePolicy: (policy: Partial<GovernancePolicy>) => void;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
+const routeFromPath = (pathname: string): { route: string; requestId: string | null } => {
+  const detailPrefix = '/app/regularization-detail/';
+  if (pathname.startsWith(detailPrefix)) {
+    return { route: 'regularization-detail', requestId: decodeURIComponent(pathname.slice(detailPrefix.length)) || null };
+  }
+  return {
+    route: pathname.startsWith('/app/') ? decodeURIComponent(pathname.slice('/app/'.length)) : 'login',
+    requestId: null,
+  };
+};
+
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [currentRole, setCurrentRole] = useState<UserRole>('student');
-  const [currentRoute, setCurrentRouteState] = useState<string>(() => {
-    const path = window.location.pathname;
-    return path.startsWith('/app/') ? decodeURIComponent(path.slice('/app/'.length)) : 'login';
-  });
+  const [currentRoute, setCurrentRouteState] = useState<string>(() => routeFromPath(window.location.pathname).route);
+  const [selectedRequestId, setSelectedRequestIdState] = useState<string | null>(() => routeFromPath(window.location.pathname).requestId);
+  const selectedRequestIdRef = useRef(selectedRequestId);
+  const setSelectedRequestId = useCallback((id: string | null) => {
+    selectedRequestIdRef.current = id;
+    setSelectedRequestIdState(id);
+  }, []);
   const setCurrentRoute = useCallback((route: string) => {
-    const path = route === 'login' ? '/auth/login' : `/app/${encodeURIComponent(route)}`;
+    const detailPath = route === 'regularization-detail' && selectedRequestIdRef.current
+      ? `/app/regularization-detail/${encodeURIComponent(selectedRequestIdRef.current)}`
+      : null;
+    const path = route === 'login' ? '/auth/login' : detailPath || `/app/${encodeURIComponent(route)}`;
     if (window.location.pathname !== path) window.history.pushState({}, '', path);
     setCurrentRouteState(route);
   }, []);
   const [apiUser, setApiUser] = useState<ApiUser | null>(null);
   const [checkingSession, setCheckingSession] = useState(true);
-  const [selectedRequestId, setSelectedRequestId] = useState<string | null>('REG-2026-0419');
 
-  const [courses] = useState<CourseStanding[]>(initialCourseStandings);
-  const [timetable] = useState<TimetableSlot[]>(initialTimetableSlots);
-  const [regularizationRequests, setRegularizationRequests] = useState<RegularizationRequest[]>(
-    initialRegularizationRequests
-  );
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
-  const [attendanceRecords] = useState<AttendanceRecord[]>(initialAttendanceRecords);
-  const [classroomStudents, setClassroomStudents] = useState<ClassroomStudent[]>(initialClassroomStudents);
-  const [departmentStats] = useState<DepartmentStat[]>(initialDepartmentStats);
-  const [governancePolicy, setGovernancePolicy] = useState<GovernancePolicy>(initialGovernancePolicy);
-  const [enrolledStudents] = useState<EnrolledStudent[]>(initialEnrolledStudents);
-  const [auditLogs] = useState<AuditLogEntry[]>(initialAuditLogs);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
 
   const authenticated = Boolean(apiUser);
@@ -115,7 +77,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     id: user.id, name: user.full_name, rollOrEmpId: user.institutional_id, email: user.email,
     role: user.role.toLowerCase() as UserRole, department: '—', initials: user.full_name.split(/\s+/).slice(0, 2).map((part) => part[0]).join('').toUpperCase(),
   });
-  const currentUser = apiUser ? mapUser(apiUser) : currentUserProfiles[currentRole];
+  const currentUser = apiUser ? mapUser(apiUser) : {
+    id: '', name: '', rollOrEmpId: '', email: '', role: currentRole, department: '—', initials: '',
+  };
 
   useEffect(() => {
     api<ApiUser>('/api/auth/me').then((user) => {
@@ -125,7 +89,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, []);
 
   useEffect(() => {
-    const onPopState = () => setCurrentRouteState(window.location.pathname.startsWith('/app/') ? decodeURIComponent(window.location.pathname.slice('/app/'.length)) : 'login');
+    const onPopState = () => {
+      const parsed = routeFromPath(window.location.pathname);
+      setCurrentRouteState(parsed.route);
+      setSelectedRequestId(parsed.requestId);
+    };
     window.addEventListener('popstate', onPopState);
     return () => window.removeEventListener('popstate', onPopState);
   }, []);
@@ -186,103 +154,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       .then(() => setNotifications((prev) => prev.map((n) => ({ ...n, unread: false }))));
   };
 
-  const submitRegularizationRequest = (
-    reqData: Omit<
-      RegularizationRequest,
-      'id' | 'filingDate' | 'status'
-    >
-  ) => {
-    const newId = `DEMO-${Date.now()}`;
-    const newRequest: RegularizationRequest = {
-      ...reqData,
-      id: newId,
-      filingDate: new Date().toLocaleString(),
-      status: 'under_review',
-    };
-
-    setRegularizationRequests((prev) => [newRequest, ...prev]);
-    setSelectedRequestId(newId);
-    setCurrentRoute('regularization-detail');
-    addToast({ type: 'info', title: 'Preview request added', message: 'This request exists only in local sample state and was not sent to the backend.' });
-  };
-
-  const approveRegularizationRequest = (id: string, comment?: string) => {
-    setRegularizationRequests((prev) =>
-      prev.map((r) => {
-        if (r.id === id) {
-          return {
-            ...r,
-            status: 'approved',
-            advisorEndorsement: {
-              advisorName: currentUser.name,
-              timestamp: new Date().toLocaleString(),
-              comment: comment || 'Approved by Faculty',
-            },
-          };
-        }
-        return r;
-      })
-    );
-
-    addToast({ type: 'info', title: 'Preview decision updated', message: 'Only the local request status changed. No attendance record or backend data was modified.' });
-  };
-
-  const rejectRegularizationRequest = (id: string, comment?: string) => {
-    setRegularizationRequests((prev) =>
-      prev.map((r) => {
-        if (r.id === id) {
-          return {
-            ...r,
-            status: 'rejected',
-            advisorEndorsement: {
-              advisorName: currentUser.name,
-              timestamp: new Date().toLocaleString(),
-              comment: comment || 'Request declined in local preview.',
-            },
-          };
-        }
-        return r;
-      })
-    );
-    addToast({ type: 'info', title: 'Preview decision updated', message: 'Only the local request status changed; it was not sent to the backend.' });
-  };
-
-  const updateClassroomStudentStatus = (
-    studentId: string,
-    status: ClassroomStudent['attendanceStatus'],
-    reason: string,
-  ) => {
-    setClassroomStudents((prev) =>
-      prev.map((st) => {
-        if (st.id === studentId) {
-          return {
-            ...st,
-            attendanceStatus: status,
-            overrideType: 'manual',
-            manualReason: reason,
-            timeMarked: status === 'verified' || status === 'late'
-              ? new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-              : undefined,
-          };
-        }
-        return st;
-      })
-    );
-  };
-
-  const updateGovernancePolicy = (newVals: Partial<GovernancePolicy>) => {
-    setGovernancePolicy((prev) => ({
-      ...prev,
-      ...newVals,
-    }));
-    addToast({ type: 'info', title: 'Preview updated locally', message: 'This sample setting is not saved to the backend.' });
-  };
-
   return (
     <AppContext.Provider
       value={{
         currentRole,
-        setCurrentRole,
         currentUser,
         authenticated,
         checkingSession,
@@ -292,26 +167,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setCurrentRoute,
         selectedRequestId,
         setSelectedRequestId,
-        courses,
-        timetable,
-        regularizationRequests,
         notifications,
-        attendanceRecords,
-        classroomStudents,
-        departmentStats,
-        governancePolicy,
-        enrolledStudents,
-        auditLogs,
         toasts,
         addToast,
         dismissToast,
         markNotificationAsRead,
         markAllNotificationsAsRead,
-        submitRegularizationRequest,
-        approveRegularizationRequest,
-        rejectRegularizationRequest,
-        updateClassroomStudentStatus,
-        updateGovernancePolicy,
       }}
     >
       {children}

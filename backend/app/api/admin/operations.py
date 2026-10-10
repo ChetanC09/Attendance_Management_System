@@ -8,14 +8,19 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.database import get_db
 from app.dependencies.auth import require_roles
-from app.models.audit import AuditLog, SystemSetting
 from app.models.academic import Course, CourseAllocation, Department
-from app.models.attendance import Attendance, AttendanceSession, AttendanceSessionStatus, AttendanceStatus
+from app.models.attendance import (
+    Attendance,
+    AttendanceSession,
+    AttendanceSessionStatus,
+    AttendanceStatus,
+)
+from app.models.audit import AuditLog, SystemSetting
 from app.models.exceptions import LeaveRequest, RequestStatus
 from app.models.timetable import Lecture
-from app.services.analytics import defaulter_list
 from app.models.user import User, UserRole
 from app.schemas.admin import AuditLogResponse
+from app.services.analytics import defaulter_list
 from app.services.audit import record_audit
 
 router = APIRouter(prefix="/admin", tags=["administration"])
@@ -26,30 +31,47 @@ Admin = Depends(require_roles(UserRole.ADMIN.value))
 def system_overview(_: User = Admin, db: Session = Depends(get_db)) -> dict[str, int | float]:
     """Operational totals for the administrator dashboard."""
     total_marks = db.scalar(select(func.count(Attendance.id))) or 0
-    attended_marks = db.scalar(
-        select(func.count(Attendance.id)).where(
-            Attendance.status.in_([AttendanceStatus.PRESENT, AttendanceStatus.LATE, AttendanceStatus.EXCUSED])
+    attended_marks = (
+        db.scalar(
+            select(func.count(Attendance.id)).where(
+                Attendance.status.in_(
+                    [AttendanceStatus.PRESENT, AttendanceStatus.LATE, AttendanceStatus.EXCUSED]
+                )
+            )
         )
-    ) or 0
-    pending = db.scalar(
-        select(func.count(LeaveRequest.id)).where(LeaveRequest.status == RequestStatus.PENDING)
-    ) or 0
-    open_sessions = db.scalar(
-        select(func.count(AttendanceSession.id)).where(
-            AttendanceSession.status == AttendanceSessionStatus.OPEN
+        or 0
+    )
+    pending = (
+        db.scalar(
+            select(func.count(LeaveRequest.id)).where(LeaveRequest.status == RequestStatus.PENDING)
         )
-    ) or 0
+        or 0
+    )
+    open_sessions = (
+        db.scalar(
+            select(func.count(AttendanceSession.id)).where(
+                AttendanceSession.status == AttendanceSessionStatus.OPEN
+            )
+        )
+        or 0
+    )
     active_users = db.scalar(select(func.count(User.id)).where(User.is_active.is_(True))) or 0
-    allocations = list(db.scalars(select(CourseAllocation).where(CourseAllocation.is_active.is_(True))))
+    allocations = list(
+        db.scalars(select(CourseAllocation).where(CourseAllocation.is_active.is_(True)))
+    )
     setting = db.get(SystemSetting, "attendance_threshold")
     threshold = float(setting.value["percentage"]) if setting else 75.0
-    low_attendance = sum(len(defaulter_list(db, allocation.id, threshold)) for allocation in allocations)
+    low_attendance = sum(
+        len(defaulter_list(db, allocation.id, threshold)) for allocation in allocations
+    )
     return {
         "departments": db.scalar(select(func.count(Department.id))) or 0,
         "courses": db.scalar(select(func.count(Course.id))) or 0,
         "lectures": db.scalar(select(func.count(Lecture.id))) or 0,
         "attendance_records": total_marks,
-        "recorded_attendance_percentage": round(attended_marks / total_marks * 100, 1) if total_marks else 0.0,
+        "recorded_attendance_percentage": round(attended_marks / total_marks * 100, 1)
+        if total_marks
+        else 0.0,
         "pending_requests": pending,
         "open_attendance_sessions": open_sessions,
         "active_users": active_users,

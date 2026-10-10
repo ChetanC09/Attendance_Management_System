@@ -43,7 +43,11 @@ def attendance_threshold(_: User = Student, db: Session = Depends(get_db)) -> di
 
 @router.get("/timetable", response_model=list[StudentTimetableItem])
 def student_timetable(student: User = Student, db: Session = Depends(get_db)) -> list[dict]:
-    section_id = select(StudentProfile.section_id).where(StudentProfile.user_id == student.id).scalar_subquery()
+    section_id = (
+        select(StudentProfile.section_id)
+        .where(StudentProfile.user_id == student.id)
+        .scalar_subquery()
+    )
     rows = db.execute(
         select(TimetableEntry, Course, Classroom, User)
         .join(CourseAllocation, CourseAllocation.id == TimetableEntry.allocation_id)

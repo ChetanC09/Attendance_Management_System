@@ -15,8 +15,10 @@ def main() -> None:
     while True:
         try:
             process_notification_batch(adapters)
-        except Exception:
-            logging.getLogger(__name__).exception("Notification worker batch failed")
+        except Exception as error:
+            logging.getLogger(__name__).error(
+                "Notification worker batch failed (%s)", type(error).__name__
+            )
         time.sleep(5)
 
 

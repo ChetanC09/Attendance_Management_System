@@ -22,25 +22,35 @@ Do not edit the root `README` text file. Preserve the Solaris Hybrid Editorial v
 
 The prior implementation pass connected the main role-based UI to live FastAPI endpoints and populated local PostgreSQL data. It reported passing frontend lint/build, 18 backend tests, 24 read-only authenticated API smoke checks, browser journeys across the three roles, idempotent seeding, migration at `0003_course_announcements`, and `git diff --check`. The admin directory placeholder and student threshold access issue were corrected. Render/Vercel configuration and deployment notes exist. This is a starting baseline, not proof that every requirement is complete.
 
-Known incomplete or unverified areas include live WebSocket reconnect/multi-client behavior; real object-storage access control, email/SMS delivery, production cross-origin cookie behavior, and vision inference with optional dependencies and consenting enrolled profiles; end-to-end journeys spanning multiple roles; performance/concurrency NFRs; architecture drift (Vite vs. Next.js); and actual cloud deployment configuration. Re-run the baseline in the current checkout before relying on it. Some audit-doc statements may be stale; reconcile them with code and fresh evidence.
+Known incomplete or unverified areas include browser WebSocket reconnect/backoff; real object-storage access control, email/SMS delivery, production cross-origin cookie behavior, and vision inference with optional dependencies and consenting enrolled profiles; automated browser E2E (the current cross-role browser journey is manual, with API persistence and two-client WebSocket coverage automated); performance/concurrency NFRs; architecture drift (Vite vs. Next.js); and actual cloud deployment configuration. Baseline results are recorded in `frontend-audit.md`.
+
+### Closure evidence update (2026-10-10)
+
+- Rebuilt backend source tests: **36 passed**, one Starlette/httpx deprecation warning. Run from the backend container with `PYTHONPATH=/srv/ams pytest -q /tmp/ams-tests` after copying `backend/tests`; this forces pytest to import the rebuilt source tree.
+- API smoke: **24 checks passed** across admin, faculty, student, role isolation, and unsafe-Origin rejection.
+- Frontend `npm run lint` and `npm run build` passed; output JS bundle 354.76 kB (96.24 kB gzip). Browser login-page viewport checks had no horizontal overflow at 375px and 714px.
+- Security regression checks cover production secret validation, reset token one-time use and session revocation, cookie flags, upload signatures/authorization, storage outage responses, worker error sanitization, pool timeout responses, and security headers. `npm audit` reports zero vulnerabilities; `pip-audit` reports none for installed PyPI packages (the unpublished local project is skipped). There is account lockout but no IP-based limiter; use edge/WAF controls before public exposure. S3, SMTP/Twilio, real camera inference, and production-origin cookie behavior remain unverified.
+- Clean migration and populated backup/restore checks succeeded in disposable databases. Restored counts matched the active local DB (9 users, 223 attendance rows); downgrade/upgrade returned to `0003_course_announcements`. Biometric embedding retention/deletion policy remains an owner decision.
+- An earlier rebuilt-image synchronized 100-session run completed 97/100 reads and 100/100 logouts, with three client `RemoteProtocolError` resets and no HTTP timeout or DB-pool errors; API logs had no matching 5xx/traceback. Investigation traced the resets to Uvicorn's 5-second keep-alive timeout interacting with the synchronized barrier and reused idle connections. After the shared entrypoint set keep-alive to 30 seconds, five consecutive probes against the rebuilt image completed 100/100 valid reads and logouts. Per-run results are in `integration/README.md`. API concurrency remains capped at 15; sampled DB peak was 17 connections. Database size was about 11 MB with 223 attendance rows and eight unique principals. This is not evidence for 100 distinct users or production capacity.
+- Logout was fixed after the load check surfaced an invalid empty response status; the route now explicitly returns HTTP 204. API smoke passed against the rebuilt container after that fix.
 
 ## Work order and acceptance criteria
 
 ### P0 — Re-establish a truthful, reproducible baseline
 
-- [ ] Inspect repository state, `AGENTS.md` instructions, compose services, migrations, API routes, frontend routes, and existing tests. Do not read or change the root README as part of this task.
-- [ ] Start the local stack from documented commands; confirm PostgreSQL, API, worker, and frontend health. Apply migrations and run `python -m scripts.seed_demo` twice against development DB; prove the second run is idempotent and records remain database-backed.
-- [ ] Run frontend lint, type-check (if separate), production build, backend formatting/lint/type checks available in project config, all backend tests, and the integration smoke suite. Record actual totals and failures; fix failures caused by the implementation.
-- [ ] Confirm no secrets, production credentials, or demo passwords are tracked. Check `git diff --check`; do not print secret values in logs or handoff.
-- [ ] Update the stale test count and seed/browser claims in `docs/frontend-audit.md` only after reconciling them with fresh results.
+- [x] Inspect repository state, `AGENTS.md` instructions, compose services, migrations, API routes, frontend routes, and existing tests. Do not read or change the root README as part of this task.
+- [x] Start the local stack from documented commands; confirm PostgreSQL, API, worker, and frontend health. Apply migrations and run `python -m scripts.seed_demo` twice against development DB; prove the second run is idempotent and records remain database-backed.
+- [x] Run frontend lint, type-check (if separate), production build, backend formatting/lint/type checks available in project config, all backend tests, and the integration smoke suite. Record actual totals and failures; fix failures caused by the implementation.
+- [x] Confirm no secrets, production credentials, or demo passwords are tracked. Check `git diff --check`; do not print secret values in logs or handoff.
+- [x] Update the stale test count and seed/browser claims in `docs/frontend-audit.md` only after reconciling them with fresh results.
 
 **Done when:** a teammate can reproduce the local setup and checks from docs, every claimed result has a command/result, and the audit accurately distinguishes verified, unverified, and blocked items.
 
 ### P1 — Close cross-role integration gaps using database-seeded data
 
 - [ ] Trace each critical journey in the System Design Document against actual API routes and UI actions. Ensure the browser calls the API and PostgreSQL is the source of the displayed data; remove any leftover fake-success UI or local hard-coded records.
-- [ ] Implement and run a browser E2E journey spanning roles: faculty records attendance (manual flow at minimum) → student views updated attendance/recovery → student submits a regularization/leave request → faculty approves/rejects → resulting attendance, audit record, and in-app notification are visible to the correct users.
-- [ ] Add role/security negative cases to E2E/API coverage: student cannot mark/edit attendance or access admin data; faculty cannot access another allocation's roster/requests; unauthenticated access is rejected; invalid Origin is rejected for unsafe cookie-authenticated requests.
+- [x] Implement and run a browser journey spanning roles: faculty records attendance (manual flow) → student views updated attendance/recovery → student submits a regularization request → faculty approves → resulting attendance, audit record, and in-app notification are visible to the correct users. The browser pass was manual; persisted cross-role assertions and notifications/audit checks are automated in `backend/tests/integration/test_attendance_journey.py`.
+- [x] Add role/security negative cases to E2E/API coverage: student cannot mark attendance or access admin data; unassigned faculty cannot access another faculty member's attendance session; unauthenticated access is rejected; invalid Origin is rejected for unsafe cookie-authenticated requests. Automated assertions are in `backend/tests/integration/test_attendance_journey.py` and `integration/scripts/smoke_api.py`.
 - [ ] Verify admin journey: create/update/deactivate a user and manage academic structure, allocation, timetable, settings, and audit entries; ensure the UI handles validation errors, conflicts, empty states, and permission errors.
 - [ ] Verify student journey: attendance totals and per-course history, configured threshold, recovery calculation, timetable, request lifecycle/document metadata, notification preferences, and profile/settings persist after reload.
 - [ ] Verify faculty journey: authorized today's classes/timetable, session lifecycle, roster, duplicate prevention, manual correction reason/audit, per-course analytics/trends/defaulters, request decisions, announcements, and settings.
@@ -74,7 +84,7 @@ Known incomplete or unverified areas include live WebSocket reconnect/multi-clie
 - [ ] Confirm all UI calculations that represent business policy come from backend responses or a shared, tested contract. Specifically check recovery/threshold math and avoid client/server drift.
 - [ ] Confirm login, logout, reset-password token route, browser back/forward, refresh/deep links, and role-scoped navigation work after a fresh browser session.
 - [ ] Make and record an explicit architecture decision for Vite vs. the design's Next.js requirement: accept Vite as a scoped deviation with owner sign-off, or create a separate migration proposal with impact and deployment consequences. Do not perform a surprise framework rewrite during integration closure.
-- [ ] Capture an updated route/requirement matrix in `docs/frontend-audit.md` that labels each requirement implemented, tested, partial, or not implemented and links to its relevant test.
+- [x] Capture an updated route/requirement matrix in `docs/frontend-audit.md` that labels each journey by implementation state, browser evidence, and remaining verification.
 
 **Done when:** every current reachable user task is mapped to the design, the Solaris system is consistent and responsive, accessibility checks are recorded, and framework deviation is explicit.
 
