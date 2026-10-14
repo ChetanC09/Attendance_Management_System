@@ -11,3 +11,4 @@ backend/.coverage
 backend/htmlcov/
 backend/.alembic/
 uploads/
+*.db
