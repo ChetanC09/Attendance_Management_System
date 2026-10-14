@@ -45,7 +45,7 @@ const MainRouter: React.FC = () => {
 
   const adminRoute = currentRoute.startsWith('admin-') || ['institutional-health-admin', 'admin-dashboard', 'governance', 'admin-governance', 'system-logs-settings', 'department-roster'].includes(currentRoute);
   const facultyRoute = currentRoute.startsWith('faculty-') || ['faculty-workspace', 'faculty-dashboard', 'camera-attendance-session', 'faculty-mark-attendance', 'faculty-manual-attendance', 'student-attendance-tracker'].includes(currentRoute);
-  const sharedRoute = ['notification-center', 'notifications', 'faculty-settings', 'student-settings'].includes(currentRoute);
+  const sharedRoute = ['notification-center', 'notifications', 'faculty-settings', 'student-settings', 'regularization-detail', 'student-regularization-detail'].includes(currentRoute);
   if (!sharedRoute && adminRoute && currentRole !== 'admin') return <AppShell>{currentRole === 'faculty' ? <FacultyOverviewView /> : <StudentDashboardView />}</AppShell>;
   if (!sharedRoute && facultyRoute && currentRole !== 'faculty') return <AppShell>{currentRole === 'admin' ? <AdminDashboardView /> : <StudentDashboardView />}</AppShell>;
   if (!sharedRoute && !adminRoute && !facultyRoute && currentRole !== 'student') return <AppShell>{currentRole === 'admin' ? <AdminDashboardView /> : <FacultyOverviewView />}</AppShell>;

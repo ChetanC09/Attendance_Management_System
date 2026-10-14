@@ -56,6 +56,7 @@ const navigation: Record<UserRole, NavigationItem[]> = {
     { label: 'Overview', route: 'institutional-health-admin', icon: LayoutDashboard },
     { label: 'User directory', route: 'admin-users', icon: Users },
     { label: 'Academic structure', route: 'admin-academic-structure', icon: GraduationCap },
+    { label: 'Timetable & lectures', route: 'admin-timetable', icon: CalendarDays },
     { label: 'Academic governance', route: 'governance', icon: Settings2 },
     { label: 'System settings & audit', route: 'system-logs-settings', icon: ShieldCheck },
     { label: 'Notifications', route: 'notification-center', icon: Bell },
