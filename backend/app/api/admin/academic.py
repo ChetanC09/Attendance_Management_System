@@ -55,6 +55,7 @@ from app.services.timetable import (
     ScheduleConflict,
     cancel_lecture,
     generate_lectures,
+    import_timetable_csv,
     validate_timetable_entry,
 )
 
@@ -400,6 +401,33 @@ def generate_entry_lectures(
         db.rollback()
         raise HTTPException(409, "Lectures already exist for part of this schedule") from None
     return {"created_count": count}
+
+
+@router.post("/timetable/import", status_code=200)
+def import_timetable(
+    payload: dict,
+    admin: User = Admin,
+    db: Session = Depends(get_db),
+) -> dict:
+    csv_text = payload.get("csv", "")
+    if not csv_text.strip():
+        raise HTTPException(422, "CSV content cannot be empty")
+    generate_through = None
+    if payload.get("generate_through"):
+        try:
+            generate_through = datetime.strptime(payload["generate_through"], "%Y-%m-%d").date()
+        except ValueError:
+            raise HTTPException(422, "generate_through must be YYYY-MM-DD")
+    result = import_timetable_csv(db, csv_text, generate_through)
+    record_audit(
+        db,
+        actor_id=admin.id,
+        action="IMPORT_TIMETABLE",
+        resource_type="timetable",
+        resource_id="bulk_import",
+        after={"imported": result["imported_entries"], "generated": result["generated_lectures"]},
+    )
+    return result
 
 
 @router.get("/lectures", response_model=list[LectureResponse])

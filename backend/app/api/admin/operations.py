@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -188,3 +188,62 @@ def list_audit_logs(
     if until:
         statement = statement.where(AuditLog.occurred_at <= until)
     return list(db.scalars(statement))
+
+
+@router.get("/defaulters/pdf")
+def export_institutional_defaulters_pdf(
+    threshold: float | None = Query(default=None, ge=0, le=100),
+    _: User = Admin,
+    db: Session = Depends(get_db),
+):
+    from fastapi.responses import Response
+    from app.services.reports import generate_institutional_defaulters_pdf
+
+    setting = db.get(SystemSetting, "attendance_threshold")
+    applied_threshold = (
+        threshold
+        if threshold is not None
+        else float(setting.value["percentage"])
+        if setting
+        else 75.0
+    )
+    pdf_bytes = generate_institutional_defaulters_pdf(db, applied_threshold)
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'attachment; filename="institutional_defaulters_{int(applied_threshold)}.pdf"'
+        },
+    )
+
+
+@router.get("/settings/checkin-subnets")
+def get_checkin_subnets(_: User = Admin, db: Session = Depends(get_db)) -> dict:
+    setting = db.get(SystemSetting, "checkin_subnets")
+    configured = setting.value.get("subnets", []) if setting else settings.allowed_checkin_subnets
+    return {"allowed_subnets": configured}
+
+
+@router.put("/settings/checkin-subnets")
+def update_checkin_subnets(
+    payload: dict, admin: User = Admin, db: Session = Depends(get_db)
+) -> dict:
+    subnets = payload.get("allowed_subnets", [])
+    setting = db.get(SystemSetting, "checkin_subnets")
+    value = {"subnets": subnets}
+    if not setting:
+        setting = SystemSetting(key="checkin_subnets", value=value)
+        db.add(setting)
+    else:
+        setting.value = value
+    setting.updated_by = admin.id
+    record_audit(
+        db,
+        actor_id=admin.id,
+        action="UPDATE",
+        resource_type="system_setting",
+        resource_id="checkin_subnets",
+        after=value,
+    )
+    db.commit()
+    return value

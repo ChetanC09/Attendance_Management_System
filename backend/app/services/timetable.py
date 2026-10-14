@@ -1,7 +1,7 @@
 from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.models.academic import Classroom, CourseAllocation
@@ -92,3 +92,114 @@ def cancel_lecture(db: Session, lecture: Lecture, reason: str) -> None:
         return
     lecture.status = LectureStatus.CANCELLED
     lecture.cancellation_reason = reason
+
+
+def import_timetable_csv(
+    db: Session, csv_text: str, generate_through: date | None = None
+) -> dict:
+    """Import timetable entries from CSV text and optionally generate dated lectures."""
+    import csv
+    import io
+    from datetime import time
+    from app.models.academic import Course, Section
+
+    day_map = {
+        "mon": 0, "monday": 0, "0": 0,
+        "tue": 1, "tuesday": 1, "1": 1,
+        "wed": 2, "wednesday": 2, "2": 2,
+        "thu": 3, "thursday": 3, "3": 3,
+        "fri": 4, "friday": 4, "4": 4,
+        "sat": 5, "saturday": 5, "5": 5,
+        "sun": 6, "sunday": 6, "6": 6,
+    }
+
+    reader = csv.DictReader(io.StringIO(csv_text.strip()))
+    imported_count = 0
+    lectures_count = 0
+    errors: list[dict] = []
+
+    for index, row in enumerate(reader, start=1):
+        try:
+            # Normalize keys to lower case
+            clean_row = {k.strip().lower(): v.strip() for k, v in row.items() if k}
+            course_code = clean_row.get("course_code") or clean_row.get("course")
+            section_name = clean_row.get("section_name") or clean_row.get("section")
+            room_code = clean_row.get("classroom_code") or clean_row.get("classroom") or clean_row.get("room")
+            weekday_str = str(clean_row.get("weekday", "")).lower()
+            starts_at_str = clean_row.get("starts_at") or clean_row.get("start_time")
+            ends_at_str = clean_row.get("ends_at") or clean_row.get("end_time")
+            from_str = clean_row.get("effective_from") or clean_row.get("from_date")
+            until_str = clean_row.get("effective_until") or clean_row.get("until_date")
+
+            if not all([course_code, section_name, room_code, weekday_str, starts_at_str, ends_at_str, from_str]):
+                errors.append({"row": index, "error": "Missing required fields (course, section, classroom, weekday, starts_at, ends_at, effective_from)"})
+                continue
+
+            weekday = day_map.get(weekday_str)
+            if weekday is None:
+                errors.append({"row": index, "error": f"Invalid weekday: {weekday_str}"})
+                continue
+
+            # Lookup allocation
+            course = db.scalar(select(Course).where(func.lower(Course.code) == course_code.lower()))
+            if not course:
+                errors.append({"row": index, "error": f"Course code not found: {course_code}"})
+                continue
+
+            section = db.scalar(select(Section).where(func.lower(Section.name) == section_name.lower()))
+            if not section:
+                errors.append({"row": index, "error": f"Section not found: {section_name}"})
+                continue
+
+            allocation = db.scalar(
+                select(CourseAllocation).where(
+                    CourseAllocation.course_id == course.id,
+                    CourseAllocation.section_id == section.id,
+                    CourseAllocation.is_active.is_(True),
+                )
+            )
+            if not allocation:
+                errors.append({"row": index, "error": f"No active course allocation for {course_code} in section {section_name}"})
+                continue
+
+            classroom = db.scalar(select(Classroom).where(func.lower(Classroom.code) == room_code.lower()))
+            if not classroom:
+                errors.append({"row": index, "error": f"Classroom code not found: {room_code}"})
+                continue
+
+            # Parse times
+            start_parts = [int(p) for p in starts_at_str.split(":")[:2]]
+            end_parts = [int(p) for p in ends_at_str.split(":")[:2]]
+            starts_time = time(start_parts[0], start_parts[1])
+            ends_time = time(end_parts[0], end_parts[1])
+
+            effective_from = datetime.strptime(from_str, "%Y-%m-%d").date()
+            effective_until = datetime.strptime(until_str, "%Y-%m-%d").date() if until_str else None
+
+            entry = TimetableEntry(
+                allocation_id=allocation.id,
+                classroom_id=classroom.id,
+                weekday=weekday,
+                starts_at=starts_time,
+                ends_at=ends_time,
+                effective_from=effective_from,
+                effective_until=effective_until,
+                is_active=True,
+            )
+            validate_timetable_entry(db, entry)
+            db.add(entry)
+            db.flush()
+            imported_count += 1
+
+            if generate_through:
+                lectures_count += generate_lectures(db, entry, generate_through)
+
+        except Exception as exc:
+            errors.append({"row": index, "error": str(exc)})
+
+    db.commit()
+    return {
+        "imported_entries": imported_count,
+        "generated_lectures": lectures_count,
+        "errors": errors,
+    }

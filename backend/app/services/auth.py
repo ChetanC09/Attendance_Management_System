@@ -168,3 +168,67 @@ def reset_password(db: Session, raw_token: str, new_password: str) -> bool:
     )
     db.commit()
     return True
+
+
+def create_password_otp(db: Session, user: User) -> str:
+    otp = f"{secrets.randbelow(900000) + 100000:06d}"
+    digest = hashlib.sha256(
+        f"{settings.secret_key.get_secret_value()}:OTP:{user.id}:{otp}".encode()
+    ).hexdigest()
+    now = datetime.now(UTC)
+    for token in db.scalars(
+        select(PasswordResetToken).where(
+            PasswordResetToken.user_id == user.id,
+            PasswordResetToken.used_at.is_(None),
+            PasswordResetToken.expires_at > now,
+        )
+    ):
+        token.used_at = now
+    db.add(
+        PasswordResetToken(
+            user_id=user.id,
+            token_digest=digest,
+            expires_at=now + timedelta(minutes=15),
+        )
+    )
+    db.commit()
+    return otp
+
+
+def verify_password_otp(db: Session, email: str, otp: str, new_password: str) -> bool:
+    user = db.scalar(
+        select(User).where(User.email == email.lower(), User.is_active.is_(True))
+    )
+    if not user:
+        return False
+    digest = hashlib.sha256(
+        f"{settings.secret_key.get_secret_value()}:OTP:{user.id}:{otp.strip()}".encode()
+    ).hexdigest()
+    now = datetime.now(UTC)
+    token = db.scalar(
+        select(PasswordResetToken).where(
+            PasswordResetToken.user_id == user.id,
+            PasswordResetToken.token_digest == digest,
+            PasswordResetToken.used_at.is_(None),
+            PasswordResetToken.expires_at > now,
+        )
+    )
+    if not token:
+        return False
+    token.used_at = now
+    user.password_hash = hash_password(new_password)
+    user.failed_login_attempts = 0
+    user.locked_until = None
+    for session in db.scalars(
+        select(AuthSession).where(AuthSession.user_id == user.id, AuthSession.revoked_at.is_(None))
+    ):
+        session.revoked_at = now
+    record_audit(
+        db,
+        actor_id=user.id,
+        action="CHANGE_PASSWORD_OTP",
+        resource_type="user",
+        resource_id=str(user.id),
+    )
+    db.commit()
+    return True

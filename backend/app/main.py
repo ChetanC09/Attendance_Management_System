@@ -21,6 +21,7 @@ from app.api.faculty.requests import router as faculty_requests_router
 from app.api.faculty.timetable import router as faculty_timetable_router
 from app.api.student.announcements import router as student_announcements_router
 from app.api.student.attendance import router as student_attendance_router
+from app.api.student.checkin import router as student_checkin_router
 from app.api.student.documents import router as student_documents_router
 from app.api.student.face_profile import router as student_face_router
 from app.api.student.notifications import router as student_notifications_router
@@ -108,6 +109,7 @@ app.include_router(student_notifications_router, prefix=settings.api_prefix)
 app.include_router(admin_users_router, prefix=settings.api_prefix)
 app.include_router(admin_operations_router, prefix=settings.api_prefix)
 app.include_router(student_face_router, prefix=settings.api_prefix)
+app.include_router(student_checkin_router, prefix=settings.api_prefix)
 app.include_router(attendance_websocket_router)
 
 

@@ -14,9 +14,11 @@ from app.schemas.auth import (
     ChangePasswordRequest,
     ForgotPasswordRequest,
     LoginRequest,
+    RequestPasswordOtpRequest,
     ResetPasswordRequest,
     SessionResponse,
     UserResponse,
+    VerifyPasswordOtpRequest,
 )
 from app.services.audit import record_audit
 from app.services.auth import (
@@ -24,10 +26,12 @@ from app.services.auth import (
     InvalidCredentials,
     authenticate,
     change_password,
+    create_password_otp,
     create_password_reset,
     reset_password,
+    verify_password_otp,
 )
-from app.services.email import send_password_reset_email
+from app.services.email import send_otp_email, send_password_reset_email
 
 router = APIRouter(prefix="/auth", tags=["authentication"])
 COOKIE_NAME = "ams_session"
@@ -136,3 +140,52 @@ def reset_password_endpoint(
     if not reset_password(db, payload.token, payload.new_password):
         raise HTTPException(400, "Reset token is invalid or expired")
     return Response(status_code=204)
+
+
+@router.post("/request-password-otp")
+def request_password_otp(
+    payload: RequestPasswordOtpRequest,
+    background_tasks: BackgroundTasks,
+    request: Request,
+    db: Session = Depends(get_db),
+) -> dict[str, str | None]:
+    target_email = payload.email
+    if not target_email:
+        cookie = request.cookies.get(COOKIE_NAME)
+        if cookie:
+            try:
+                claims = decode_access_token(cookie)
+                user = db.get(User, claims.get("sub"))
+                if user and user.is_active:
+                    target_email = user.email
+            except Exception:
+                pass
+    if not target_email:
+        raise HTTPException(422, "Email is required to request a password verification code")
+
+    user = db.scalar(
+        select(User).where(User.email == str(target_email).lower(), User.is_active.is_(True))
+    )
+    dev_otp = None
+    if user:
+        otp = create_password_otp(db, user)
+        background_tasks.add_task(send_otp_email, user.email, otp)
+        if settings.env == "development":
+            dev_otp = otp
+
+    return {
+        "detail": f"If an active account exists for {target_email}, a 6-digit verification code has been dispatched.",
+        "dev_otp": dev_otp,
+    }
+
+
+@router.post("/verify-password-otp", status_code=200)
+def verify_password_otp_endpoint(
+    payload: VerifyPasswordOtpRequest, db: Session = Depends(get_db)
+) -> dict[str, str]:
+    success = verify_password_otp(
+        db, str(payload.email).lower(), payload.otp, payload.new_password
+    )
+    if not success:
+        raise HTTPException(400, "Invalid or expired verification code")
+    return {"detail": "Password updated successfully. Please sign in with your new password."}

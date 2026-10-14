@@ -40,7 +40,7 @@ class Settings(BaseSettings):
     s3_secret_access_key: SecretStr | None = None
     max_document_bytes: int = 10 * 1024 * 1024
     vision_minimum_confidence: float = 0.45
-    smtp_host: str | None = None
+    smtp_host: str = "smtp.gmail.com"
     smtp_port: int = 587
     smtp_username: str | None = None
     smtp_password: SecretStr | None = None
@@ -49,6 +49,8 @@ class Settings(BaseSettings):
     twilio_account_sid: str | None = None
     twilio_auth_token: SecretStr | None = None
     twilio_from_number: str | None = None
+    # CIDR subnets allowed for student face self-checkin (college network)
+    allowed_checkin_subnets: list[str] = ["192.168.1.0/24", "127.0.0.1/32", "::1/128"]
 
     @field_validator("access_token_minutes")
     @classmethod

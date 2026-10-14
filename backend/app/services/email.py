@@ -22,6 +22,30 @@ def send_password_reset_email(recipient: str, token: str) -> None:
     )
 
 
+def send_otp_email(recipient: str, otp: str) -> None:
+    subject = "Your AMS Password Verification Code"
+    body = (
+        f"Hello,\n\n"
+        f"Your one-time verification code to update your AMS password is:\n\n"
+        f"    {otp}\n\n"
+        f"This code will expire in 15 minutes.\n"
+        f"If you did not request this, please disregard this email.\n\n"
+        f"— Attendance Management System"
+    )
+    if not settings.smtp_username:
+        logger.warning(
+            "🔑 [DEV NOTICE] Gmail SMTP username not yet set in .env. Verification OTP for %s is: %s",
+            recipient,
+            otp,
+        )
+        return
+    try:
+        send_email(recipient, subject, body)
+    except Exception as exc:
+        logger.error("Failed to send OTP email to %s: %s", recipient, exc)
+        logger.warning("🔑 [FALLBACK] OTP for %s is: %s", recipient, otp)
+
+
 def send_email(recipient: str, subject: str, body: str) -> None:
     if not settings.smtp_host:
         raise RuntimeError("SMTP is not configured")

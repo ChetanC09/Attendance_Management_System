@@ -15,6 +15,7 @@ import { RegularizationDetailView } from './components/student/RegularizationDet
 import { AttendanceHistoryView } from './components/student/AttendanceHistoryView';
 import { NotificationCenterView } from './components/student/NotificationCenterView';
 import { RecoveryPlannerView } from './components/student/RecoveryPlannerView';
+import { StudentFaceCheckinView } from './components/student/StudentFaceCheckinView';
 
 // Faculty Views
 import { FacultyOverviewView } from './components/faculty/FacultyOverviewView';
@@ -94,6 +95,9 @@ const MainRouter: React.FC = () => {
       case 'student-settings':
         return <AccountSettingsView />;
 
+      case 'student-face-checkin':
+        return <StudentFaceCheckinView />;
+
       // Faculty Routes & Aliases
       case 'faculty-workspace':
       case 'faculty-dashboard':
@@ -101,10 +105,8 @@ const MainRouter: React.FC = () => {
 
       case 'camera-attendance-session':
       case 'faculty-mark-attendance':
-        return <FacultyMarkAttendanceView mode="camera" />;
-
       case 'faculty-manual-attendance':
-        return <FacultyMarkAttendanceView mode="manual" />;
+        return <FacultyMarkAttendanceView />;
 
       case 'faculty-timetable':
         return <TimetableView />;

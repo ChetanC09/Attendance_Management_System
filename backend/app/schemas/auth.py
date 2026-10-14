@@ -25,6 +25,16 @@ class ResetPasswordRequest(BaseModel):
     new_password: str = Field(min_length=12, max_length=128)
 
 
+class RequestPasswordOtpRequest(BaseModel):
+    email: EmailStr | None = None
+
+
+class VerifyPasswordOtpRequest(BaseModel):
+    email: EmailStr
+    otp: str = Field(min_length=6, max_length=6)
+    new_password: str = Field(min_length=12, max_length=128)
+
+
 class UserResponse(BaseModel):
     model_config = {"from_attributes": True}
 

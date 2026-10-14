@@ -9,11 +9,11 @@ import {
   LayoutDashboard,
   LogOut,
   Menu,
+  ScanFace,
   Settings2,
   ShieldCheck,
   Users,
   Video,
-  X,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
@@ -32,6 +32,7 @@ interface NavigationItem {
 const navigation: Record<UserRole, NavigationItem[]> = {
   student: [
     { label: 'Overview', route: 'overview-dashboard', icon: LayoutDashboard },
+    { label: 'Face check-in', route: 'student-face-checkin', icon: ScanFace },
     { label: 'Course attendance', route: 'course-attendance', icon: BookOpen },
     { label: 'Attendance history', route: 'attendance-history', icon: FileClock },
     { label: 'Recovery planner', route: 'recovery-planner', icon: ClipboardCheck },
@@ -43,11 +44,9 @@ const navigation: Record<UserRole, NavigationItem[]> = {
   faculty: [
     { label: 'Overview', route: 'faculty-workspace', icon: LayoutDashboard },
     { label: "Today's classes", route: 'faculty-timetable', icon: CalendarDays },
-    { label: 'Camera attendance', route: 'camera-attendance-session', icon: Video },
-    { label: 'Manual attendance', route: 'faculty-manual-attendance', icon: ClipboardCheck },
-    { label: 'Defaulters', route: 'student-attendance-tracker', icon: Users },
+    { label: 'Take attendance', route: 'faculty-mark-attendance', icon: ClipboardCheck },
+    { label: 'Defaulters & analytics', route: 'faculty-analytics', icon: Users },
     { label: 'Request review', route: 'faculty-approvals', icon: FileClock },
-    { label: 'Analytics & students', route: 'faculty-analytics', icon: Users },
     { label: 'Announcements', route: 'faculty-announcements', icon: Bell },
     { label: 'Notifications', route: 'notification-center', icon: Bell },
     { label: 'Settings', route: 'faculty-settings', icon: Settings2 },
@@ -90,11 +89,12 @@ const routeNames: Record<string, string> = {
   'notification-center': 'Notifications',
   'student-notifications': 'Notifications',
   'student-settings': 'Profile & settings',
+  'student-face-checkin': 'Face check-in',
   'faculty-workspace': 'Overview',
   'faculty-dashboard': 'Overview',
-  'camera-attendance-session': 'Camera attendance',
-  'faculty-mark-attendance': 'Camera attendance',
-  'faculty-manual-attendance': 'Manual attendance',
+  'camera-attendance-session': 'Take attendance',
+  'faculty-mark-attendance': 'Take attendance',
+  'faculty-manual-attendance': 'Take attendance',
   'faculty-timetable': "Today's classes",
   'student-attendance-tracker': 'Class roster',
   'faculty-approvals': 'Request review',
@@ -151,19 +151,11 @@ export const AppShell: React.FC<AppShellProps> = ({ children }) => {
       <aside className={`ams-sidebar ${mobileMenuOpen ? 'ams-sidebar-open' : ''}`}>
         <div className="ams-brand">
           <button type="button" className="ams-brand-button" onClick={() => navigate(roleHome[currentRole])}>
-            <span className="ams-brand-mark"><GraduationCap size={20} /></span>
+            <img src="/spit-logo.png" alt="SPIT Logo" className="ams-brand-logo" />
             <span>
-              <span className="ams-brand-name">SPIT Attendance</span>
-              <span className="ams-brand-subtitle">Attendance Management System</span>
+              <span className="ams-brand-name">SPIT</span>
+              <span className="ams-brand-subtitle">AMS</span>
             </span>
-          </button>
-          <button
-            type="button"
-            className="ams-icon-button ams-sidebar-close lg:hidden"
-            aria-label="Close navigation"
-            onClick={() => setMobileMenuOpen(false)}
-          >
-            <X size={18} />
           </button>
         </div>
 
@@ -180,7 +172,10 @@ export const AppShell: React.FC<AppShellProps> = ({ children }) => {
                 type="button"
                 aria-current={active ? 'page' : undefined}
                 className={`ams-nav-item ${active ? 'ams-nav-item-active' : ''}`}
-                onClick={() => navigate(route)}
+                onClick={() => {
+                  navigate(route);
+                  setMobileMenuOpen(false);
+                }}
               >
                 <Icon size={18} strokeWidth={1.8} />
                 <span>{label}</span>
@@ -218,23 +213,27 @@ export const AppShell: React.FC<AppShellProps> = ({ children }) => {
           <div className="ams-topbar-title">
             <button
               type="button"
-              className="ams-icon-button lg:hidden"
+              className="ams-icon-button"
               aria-label="Open navigation"
               aria-expanded={mobileMenuOpen}
               onClick={() => setMobileMenuOpen(true)}
             >
-              <Menu size={19} />
+              <Menu size={20} />
             </button>
-            <span className="ams-crumb-root">SPIT AMS</span>
-            <span className="ams-crumb-divider" aria-hidden="true">/</span>
-            <span className="ams-crumb-current">{routeNames[currentRoute] ?? 'Overview'}</span>
+            <div className="flex items-center gap-2">
+              <img src="/spit-logo.png" alt="SPIT Logo" className="h-7 w-7 rounded-full object-contain bg-white border border-slate-200 p-0.5" />
+              <span className="font-bold text-slate-900 text-sm tracking-tight">SPIT AMS</span>
+            </div>
           </div>
           <div className="ams-topbar-actions">
             <button
               type="button"
               className="ams-icon-button ams-notification-button"
               aria-label={`Notifications${unreadCount ? `, ${unreadCount} unread` : ''}`}
-              onClick={() => navigate('notification-center')}
+              onClick={() => {
+                navigate('notification-center');
+                setMobileMenuOpen(false);
+              }}
               title="Notifications"
             >
               <Bell size={18} />

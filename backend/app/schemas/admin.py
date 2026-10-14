@@ -21,6 +21,8 @@ class AdminUserUpdate(BaseModel):
     full_name: str | None = Field(default=None, min_length=1, max_length=160)
     is_active: bool | None = None
     phone_number: str | None = Field(default=None, pattern=r"^\+[1-9]\d{7,14}$")
+    department_id: uuid.UUID | None = None
+    section_id: uuid.UUID | None = None
 
 
 class AdminUserResponse(BaseModel):
@@ -33,6 +35,8 @@ class AdminUserResponse(BaseModel):
     phone_number: str | None
     role: UserRole
     is_active: bool
+    department_id: uuid.UUID | None = None
+    section_id: uuid.UUID | None = None
     created_at: datetime
 
 

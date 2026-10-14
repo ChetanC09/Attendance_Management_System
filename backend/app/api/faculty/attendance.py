@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -29,6 +29,12 @@ from app.services.attendance import (
     modify_attendance,
     record_attendance,
 )
+from app.services.network import (
+    bind_session_network,
+    get_client_ip,
+    get_session_network,
+    update_session_network,
+)
 from app.vision.schemas import AttendanceRecognitionResponse, RecognitionState
 from app.vision.service import recognize_image
 
@@ -46,12 +52,50 @@ def _raise_rule(error: AttendanceRuleError) -> None:
 
 @router.post("/session", response_model=AttendanceSessionResponse, status_code=201)
 def start_session(
-    payload: StartSessionRequest, faculty: User = Faculty, db: Session = Depends(get_db)
+    payload: StartSessionRequest,
+    request: Request,
+    faculty: User = Faculty,
+    db: Session = Depends(get_db),
 ) -> AttendanceSession:
     try:
-        return create_attendance_session(db, faculty, payload.lecture_id)
+        session = create_attendance_session(db, faculty, payload.lecture_id)
+        faculty_ip = get_client_ip(request)
+        bind_session_network(db, session.id, faculty_ip, enforced=True)
+        return session
     except AttendanceRuleError as error:
         _raise_rule(error)
+
+
+@router.get("/session/{session_id}/network")
+def read_session_network(
+    session_id: UUID, faculty: User = Faculty, db: Session = Depends(get_db)
+) -> dict:
+    try:
+        session = get_authorized_session(db, faculty, session_id)
+    except AttendanceRuleError as error:
+        _raise_rule(error)
+    return get_session_network(db, session.id)
+
+
+@router.post("/session/{session_id}/network")
+def update_network_lock(
+    session_id: UUID,
+    payload: dict,
+    request: Request,
+    faculty: User = Faculty,
+    db: Session = Depends(get_db),
+) -> dict:
+    try:
+        session = get_authorized_session(db, faculty, session_id)
+    except AttendanceRuleError as error:
+        _raise_rule(error)
+    enforced = payload.get("enforced", True)
+    auto_detect = payload.get("auto_detect", False)
+    custom_subnet = payload.get("custom_subnet")
+    if auto_detect:
+        faculty_ip = get_client_ip(request)
+        return bind_session_network(db, session.id, faculty_ip, enforced=enforced)
+    return update_session_network(db, session.id, enforced=enforced, custom_subnet=custom_subnet)
 
 
 @router.get("/session/{session_id}", response_model=AttendanceSessionDetail)

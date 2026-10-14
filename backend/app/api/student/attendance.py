@@ -168,3 +168,21 @@ def projection(
     return projected_attendance(
         item["attended_lectures"], item["conducted_lectures"], potential_absences, threshold
     )
+
+
+@router.get("/analytics/report/pdf")
+def export_my_report_pdf(
+    student: User = Student,
+    db: Session = Depends(get_db),
+):
+    from fastapi.responses import Response
+    from app.services.reports import generate_student_attendance_pdf
+
+    pdf_bytes = generate_student_attendance_pdf(db, student.id)
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'attachment; filename="my_attendance_report_{student.institutional_id}.pdf"'
+        },
+    )
