@@ -1,3 +1,4 @@
+from urllib.parse import quote
 from uuid import UUID
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
@@ -14,7 +15,7 @@ from app.models.user import User, UserRole
 from app.schemas.exceptions import RequestResponse, RequestReview, SupportingDocumentResponse
 from app.services.exceptions import RequestRuleError, review_request
 from app.services.notifications import enqueue_in_app_notification
-from app.services.storage import get_storage_service
+from app.services.storage import StorageUnavailable, get_storage_service
 
 router = APIRouter(prefix="/faculty/requests", tags=["faculty requests"])
 Faculty = Depends(require_roles(UserRole.FACULTY.value))
@@ -73,7 +74,17 @@ def download_supporting_document(
         content = get_storage_service().download(document.storage_key)
     except FileNotFoundError:
         raise HTTPException(404, "Document content is unavailable") from None
-    return Response(content, media_type=document.content_type)
+    except StorageUnavailable:
+        raise HTTPException(503, "Document storage is temporarily unavailable") from None
+    return Response(
+        content,
+        media_type=document.content_type,
+        headers={
+            "Content-Disposition": (
+                f"attachment; filename*=UTF-8''{quote(document.original_filename, safe='')}"
+            )
+        },
+    )
 
 
 def _review(

@@ -26,6 +26,23 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   return response.json() as Promise<T>;
 }
 
+export async function apiBlob(path: string): Promise<Blob> {
+  const response = await fetch(`${API_BASE}${path.startsWith('/api') ? '' : '/api'}${path}`, {
+    headers: { 'X-Requested-With': 'XMLHttpRequest' },
+    credentials: 'include',
+  });
+  if (!response.ok) {
+    let message = `Request failed (${response.status})`;
+    try {
+      const body = await response.json();
+      const detail = body.detail ?? body.message;
+      if (typeof detail === 'string') message = detail;
+    } catch { /* non-JSON error */ }
+    throw new ApiError(response.status, message);
+  }
+  return response.blob();
+}
+
 export const jsonBody = (value: unknown) => JSON.stringify(value);
 export const apiBaseUrl = API_BASE;
 

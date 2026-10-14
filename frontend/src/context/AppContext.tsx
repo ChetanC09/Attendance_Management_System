@@ -20,6 +20,8 @@ interface AppContextType {
   setCurrentRoute: (route: string) => void;
   selectedRequestId: string | null;
   setSelectedRequestId: (id: string | null) => void;
+  selectedLectureId: string | null;
+  setSelectedLectureId: (id: string | null) => void;
 
   notifications: NotificationItem[];
 
@@ -32,8 +34,8 @@ interface AppContextType {
   dismissToast: (id: string) => void;
   toasts: ToastMessage[];
 
-  markNotificationAsRead: (id: string) => void;
-  markAllNotificationsAsRead: () => void;
+  markNotificationAsRead: (id: string) => Promise<void>;
+  markAllNotificationsAsRead: () => Promise<void>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -42,6 +44,12 @@ const routeFromPath = (pathname: string): { route: string; requestId: string | n
   const detailPrefix = '/app/regularization-detail/';
   if (pathname.startsWith(detailPrefix)) {
     return { route: 'regularization-detail', requestId: decodeURIComponent(pathname.slice(detailPrefix.length)) || null };
+  }
+  // attendance-history/{courseId} is URL-backed via /app/attendance-history/{courseId}
+  const historyPrefix = '/app/attendance-history/';
+  if (pathname.startsWith(historyPrefix)) {
+    const courseId = decodeURIComponent(pathname.slice(historyPrefix.length));
+    return { route: courseId ? `attendance-history/${courseId}` : 'attendance-history', requestId: null };
   }
   return {
     route: pathname.startsWith('/app/') ? decodeURIComponent(pathname.slice('/app/'.length)) : 'login',
@@ -53,6 +61,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [currentRole, setCurrentRole] = useState<UserRole>('student');
   const [currentRoute, setCurrentRouteState] = useState<string>(() => routeFromPath(window.location.pathname).route);
   const [selectedRequestId, setSelectedRequestIdState] = useState<string | null>(() => routeFromPath(window.location.pathname).requestId);
+  const [selectedLectureId, setSelectedLectureId] = useState<string | null>(null);
   const selectedRequestIdRef = useRef(selectedRequestId);
   const setSelectedRequestId = useCallback((id: string | null) => {
     selectedRequestIdRef.current = id;
@@ -62,7 +71,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const detailPath = route === 'regularization-detail' && selectedRequestIdRef.current
       ? `/app/regularization-detail/${encodeURIComponent(selectedRequestIdRef.current)}`
       : null;
-    const path = route === 'login' ? '/auth/login' : detailPath || `/app/${encodeURIComponent(route)}`;
+    // attendance-history/{courseId} gets its own clean URL
+    const historyPath = route.startsWith('attendance-history/') ? `/app/${route}` : null;
+    const path = route === 'login' ? '/auth/login' : detailPath || historyPath || `/app/${encodeURIComponent(route)}`;
     if (window.location.pathname !== path) window.history.pushState({}, '', path);
     setCurrentRouteState(route);
   }, []);
@@ -145,13 +156,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setToasts((prev) => prev.filter((t) => t.id !== id));
   };
 
-  const markNotificationAsRead = (id: string) => {
-    void api(`/api/notifications/${id}/read`, { method: 'POST' }).then(() => setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, unread: false } : n))));
+  const markNotificationAsRead = async (id: string) => {
+    await api(`/api/notifications/${id}/read`, { method: 'POST' });
+    setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, unread: false } : n)));
   };
 
-  const markAllNotificationsAsRead = () => {
-    void Promise.all(notifications.filter((item) => item.unread).map((item) => api(`/api/notifications/${item.id}/read`, { method: 'POST' })))
-      .then(() => setNotifications((prev) => prev.map((n) => ({ ...n, unread: false }))));
+  const markAllNotificationsAsRead = async () => {
+    const unread = notifications.filter((item) => item.unread);
+    await Promise.all(unread.map((item) => api(`/api/notifications/${item.id}/read`, { method: 'POST' })));
+    setNotifications((prev) => prev.map((n) => ({ ...n, unread: false })));
   };
 
   return (
@@ -167,6 +180,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setCurrentRoute,
         selectedRequestId,
         setSelectedRequestId,
+        selectedLectureId,
+        setSelectedLectureId,
         notifications,
         toasts,
         addToast,

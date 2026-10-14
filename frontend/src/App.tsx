@@ -45,9 +45,10 @@ const MainRouter: React.FC = () => {
 
   const adminRoute = currentRoute.startsWith('admin-') || ['institutional-health-admin', 'admin-dashboard', 'governance', 'admin-governance', 'system-logs-settings', 'department-roster'].includes(currentRoute);
   const facultyRoute = currentRoute.startsWith('faculty-') || ['faculty-workspace', 'faculty-dashboard', 'camera-attendance-session', 'faculty-mark-attendance', 'faculty-manual-attendance', 'student-attendance-tracker'].includes(currentRoute);
-  if (adminRoute && currentRole !== 'admin') return <AppShell>{currentRole === 'faculty' ? <FacultyOverviewView /> : <StudentDashboardView />}</AppShell>;
-  if (facultyRoute && currentRole !== 'faculty') return <AppShell>{currentRole === 'admin' ? <AdminDashboardView /> : <StudentDashboardView />}</AppShell>;
-  if (!adminRoute && !facultyRoute && currentRole !== 'student') return <AppShell>{currentRole === 'admin' ? <AdminDashboardView /> : <FacultyOverviewView />}</AppShell>;
+  const sharedRoute = ['notification-center', 'notifications', 'faculty-settings', 'student-settings'].includes(currentRoute);
+  if (!sharedRoute && adminRoute && currentRole !== 'admin') return <AppShell>{currentRole === 'faculty' ? <FacultyOverviewView /> : <StudentDashboardView />}</AppShell>;
+  if (!sharedRoute && facultyRoute && currentRole !== 'faculty') return <AppShell>{currentRole === 'admin' ? <AdminDashboardView /> : <StudentDashboardView />}</AppShell>;
+  if (!sharedRoute && !adminRoute && !facultyRoute && currentRole !== 'student') return <AppShell>{currentRole === 'admin' ? <AdminDashboardView /> : <FacultyOverviewView />}</AppShell>;
 
   const renderCurrentView = () => {
     if (currentRoute.startsWith('attendance-history/')) return <AttendanceHistoryView />;
@@ -87,6 +88,7 @@ const MainRouter: React.FC = () => {
         return <RecoveryPlannerView />;
 
       case 'notification-center':
+      case 'notifications':
       case 'student-notifications':
         return <NotificationCenterView />;
       case 'student-settings':

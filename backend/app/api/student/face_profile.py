@@ -16,6 +16,17 @@ router = APIRouter(prefix="/student/face-profile", tags=["face profile"])
 Student = Depends(require_roles(UserRole.STUDENT.value))
 
 
+@router.get("")
+def read_face_profile(student: User = Student, db: Session = Depends(get_db)) -> dict:
+    """Return enrollment metadata for the current student without exposing biometric vectors."""
+    profile = db.scalar(select(FaceProfile).where(FaceProfile.student_id == student.id))
+    return {
+        "enrolled": bool(profile and profile.revoked_at is None),
+        "consented_at": profile.consented_at if profile else None,
+        "revoked_at": profile.revoked_at if profile else None,
+    }
+
+
 @router.post("/enroll", status_code=201)
 async def enroll_face(
     consent: bool = Form(...),

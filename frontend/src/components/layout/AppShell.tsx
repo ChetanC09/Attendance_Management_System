@@ -49,6 +49,7 @@ const navigation: Record<UserRole, NavigationItem[]> = {
     { label: 'Request review', route: 'faculty-approvals', icon: FileClock },
     { label: 'Analytics & students', route: 'faculty-analytics', icon: Users },
     { label: 'Announcements', route: 'faculty-announcements', icon: Bell },
+    { label: 'Notifications', route: 'notification-center', icon: Bell },
     { label: 'Settings', route: 'faculty-settings', icon: Settings2 },
   ],
   admin: [
@@ -57,6 +58,7 @@ const navigation: Record<UserRole, NavigationItem[]> = {
     { label: 'Academic structure', route: 'admin-academic-structure', icon: GraduationCap },
     { label: 'Academic governance', route: 'governance', icon: Settings2 },
     { label: 'System settings & audit', route: 'system-logs-settings', icon: ShieldCheck },
+    { label: 'Notifications', route: 'notification-center', icon: Bell },
   ],
 };
 
@@ -231,7 +233,7 @@ export const AppShell: React.FC<AppShellProps> = ({ children }) => {
               type="button"
               className="ams-icon-button ams-notification-button"
               aria-label={`Notifications${unreadCount ? `, ${unreadCount} unread` : ''}`}
-              onClick={() => navigate(currentRole === 'student' ? 'notification-center' : 'notification-center')}
+              onClick={() => navigate('notification-center')}
               title="Notifications"
             >
               <Bell size={18} />

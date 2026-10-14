@@ -17,6 +17,7 @@ from app.models import (
     AuditLog,
     AuthSession,
     Base,
+    FaceProfile,
     Lecture,
     LectureStatus,
     PasswordResetToken,
@@ -26,6 +27,7 @@ from app.models import (
 )
 from app.services.auth import create_password_reset, reset_password
 from app.services.storage import StorageUnavailable
+from app.vision.schemas import RecognitionResult, RecognitionState
 
 
 @pytest.fixture
@@ -167,6 +169,20 @@ def test_admin_to_student_regularization_journey(api_database: Session, monkeypa
         assert second_student_response.status_code == 201, second_student_response.text
         second_student_id = second_student_response.json()["id"]
 
+        camera_student_response = admin_client.post(
+            "/api/admin/users",
+            json={
+                "institutional_id": "STU-CAM",
+                "email": "camera-student@example.edu",
+                "full_name": "Camera Student",
+                "password": "Camera student password 2026!",
+                "role": "STUDENT",
+                "section_id": section_id,
+            },
+        )
+        assert camera_student_response.status_code == 201, camera_student_response.text
+        camera_student_id = camera_student_response.json()["id"]
+
         allocation_response = admin_client.post(
             "/api/admin/allocations",
             json={
@@ -256,6 +272,55 @@ def test_admin_to_student_regularization_journey(api_database: Session, monkeypa
                     started = socket.receive_json()
                     assert started["type"] == "SESSION_STARTED"
                     assert started["session_id"] == session_id
+
+                monkeypatch.setattr(
+                    "app.api.faculty.attendance.recognize_image",
+                    lambda *_args: RecognitionResult(
+                        state=RecognitionState.RECOGNIZED,
+                        student_id=UUID(camera_student_id),
+                        confidence=0.97,
+                    ),
+                )
+                camera_response = faculty_client.post(
+                    f"/api/faculty/attendance/session/{session_id}/recognize",
+                    files={"image": ("frame.jpg", b"synthetic camera frame", "image/jpeg")},
+                )
+                assert camera_response.status_code == 200, camera_response.text
+                assert camera_response.json()["attendance_state"] == "recorded"
+                assert camera_response.json()["student_id"] == camera_student_id
+                for socket in (socket_one, socket_two):
+                    event = socket.receive_json()
+                    assert event["type"] == "ATTENDANCE_RECORDED"
+                    assert event["student_id"] == camera_student_id
+
+                duplicate_camera_response = faculty_client.post(
+                    f"/api/faculty/attendance/session/{session_id}/recognize",
+                    files={"image": ("frame.jpg", b"synthetic camera frame", "image/jpeg")},
+                )
+                assert duplicate_camera_response.status_code == 200
+                assert duplicate_camera_response.json()["attendance_state"] == "duplicate"
+
+                monkeypatch.setattr(
+                    "app.api.faculty.attendance.recognize_image",
+                    lambda *_args: RecognitionResult(
+                        state=RecognitionState.UNKNOWN,
+                        confidence=0.12,
+                        message="No enrolled face matched.",
+                    ),
+                )
+                unknown_camera_response = faculty_client.post(
+                    f"/api/faculty/attendance/session/{session_id}/recognize",
+                    files={"image": ("frame.png", b"synthetic camera frame", "image/png")},
+                )
+                assert unknown_camera_response.status_code == 200
+                assert unknown_camera_response.json()["state"] == "unknown"
+                assert unknown_camera_response.json()["attendance_state"] is None
+
+                invalid_camera_response = faculty_client.post(
+                    f"/api/faculty/attendance/session/{session_id}/recognize",
+                    files={"image": ("frame.gif", b"not a supported image", "image/gif")},
+                )
+                assert invalid_camera_response.status_code == 415
 
                 manual_response = faculty_client.post(
                     "/api/faculty/attendance/manual",
@@ -347,6 +412,15 @@ def test_admin_to_student_regularization_journey(api_database: Session, monkeypa
                 assert upload_response.status_code == 201, upload_response.text
                 document_id = upload_response.json()["id"]
                 assert upload_response.json()["filename"] == "evidence.pdf"
+                monkeypatch.setattr(
+                    "app.api.faculty.requests.get_storage_service", lambda: TestStorage()
+                )
+                faculty_download = faculty_client.get(
+                    f"/api/faculty/requests/documents/{document_id}"
+                )
+                assert faculty_download.status_code == 200
+                assert faculty_download.content == b"%PDF-1.7 test evidence"
+                assert "attachment" in faculty_download.headers["content-disposition"]
                 assert (
                     student_client.get(f"/api/student/requests/{request_id}/documents").json()[0][
                         "id"
@@ -379,6 +453,30 @@ def test_admin_to_student_regularization_journey(api_database: Session, monkeypa
                         ).status_code
                         == 404
                     )
+
+                unauthorized_faculty = admin_client.post(
+                    "/api/admin/users",
+                    json={
+                        "institutional_id": "FAC-DOC",
+                        "email": "document-faculty@example.edu",
+                        "full_name": "Unassigned Document Reviewer",
+                        "password": "Document faculty password 2026!",
+                        "role": "FACULTY",
+                        "department_id": department_id,
+                    },
+                )
+                assert unauthorized_faculty.status_code == 201
+                with TestClient(app) as unauthorized_faculty_client:
+                    assert unauthorized_faculty_client.post(
+                        "/api/auth/login",
+                        json={
+                            "email": "document-faculty@example.edu",
+                            "password": "Document faculty password 2026!",
+                        },
+                    ).status_code == 200
+                    assert unauthorized_faculty_client.get(
+                        f"/api/faculty/requests/documents/{document_id}"
+                    ).status_code == 404
 
                 def unavailable_storage():
                     raise StorageUnavailable("sanitized provider failure")
@@ -474,6 +572,61 @@ def test_database_allows_only_one_open_session_per_lecture(api_database: Session
     with pytest.raises(IntegrityError):
         db.commit()
     db.rollback()
+
+
+def test_student_can_read_and_revoke_own_face_profile_only(api_database: Session) -> None:
+    student = User(
+        institutional_id="STU-FACE",
+        email="face-student@example.edu",
+        full_name="Face Student",
+        password_hash=hash_password("Face student password 2026!"),
+        role=UserRole.STUDENT,
+        is_active=True,
+    )
+    admin = User(
+        institutional_id="ADM-FACE",
+        email="face-admin@example.edu",
+        full_name="Face Admin",
+        password_hash=hash_password("Face admin password 2026!"),
+        role=UserRole.ADMIN,
+        is_active=True,
+    )
+    api_database.add_all([student, admin])
+    api_database.commit()
+
+    with TestClient(app) as client:
+        assert client.get("/api/student/face-profile").status_code == 401
+        assert client.post(
+            "/api/auth/login",
+            json={"email": student.email, "password": "Face student password 2026!"},
+        ).status_code == 200
+        assert client.get("/api/student/face-profile").json() == {
+            "enrolled": False,
+            "consented_at": None,
+            "revoked_at": None,
+        }
+        assert client.delete("/api/student/face-profile").status_code == 204
+
+        api_database.add(FaceProfile(student_id=student.id, consented_at=datetime.now(UTC)))
+        api_database.commit()
+        profile = client.get("/api/student/face-profile")
+        assert profile.status_code == 200
+        assert profile.json()["enrolled"] is True
+        assert profile.json()["consented_at"] is not None
+
+        revoked = client.delete("/api/student/face-profile")
+        assert revoked.status_code == 204
+        profile = client.get("/api/student/face-profile")
+        assert profile.status_code == 200
+        assert profile.json()["enrolled"] is False
+        assert profile.json()["revoked_at"] is not None
+
+    with TestClient(app) as admin_client:
+        assert admin_client.post(
+            "/api/auth/login",
+            json={"email": admin.email, "password": "Face admin password 2026!"},
+        ).status_code == 200
+        assert admin_client.get("/api/student/face-profile").status_code == 403
 
 
 def test_password_reset_is_one_time_and_revokes_existing_sessions(api_database: Session) -> None:

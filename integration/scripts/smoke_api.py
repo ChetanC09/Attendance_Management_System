@@ -37,6 +37,8 @@ def main() -> int:
             "/api/admin/allocations",
             "/api/admin/timetable",
             "/api/admin/audit-logs?limit=20",
+            "/api/notifications",
+            "/api/notifications/preferences",
         ],
         "faculty": [
             "/api/faculty/lectures/today",
@@ -46,6 +48,8 @@ def main() -> int:
             "/api/faculty/analytics/trend",
             "/api/faculty/requests",
             "/api/faculty/announcements",
+            "/api/notifications",
+            "/api/notifications/preferences",
         ],
         "student1": [
             "/api/student/attendance",
@@ -55,6 +59,7 @@ def main() -> int:
             "/api/student/requests",
             "/api/student/announcements",
             "/api/notifications",
+            "/api/student/face-profile",
         ],
     }
     emails = {"admin": "admin@ams.dev", "faculty": "faculty@ams.dev", "student1": "student1@ams.dev"}
@@ -86,6 +91,11 @@ def main() -> int:
             raise AssertionError(f"Faculty admin access should be 403, got {faculty_denial.status_code}")
         total += 1
         print("PASS role isolation: student and faculty denied admin overview")
+        admin_face_denial = clients["admin"].get("/api/student/face-profile")
+        if admin_face_denial.status_code != 403:
+            raise AssertionError(f"Admin face-profile access should be 403, got {admin_face_denial.status_code}")
+        total += 1
+        print("PASS student biometric profile is restricted to its owner role")
 
         invalid_origin = clients["student1"].post(
             "/api/notifications/preferences/EMAIL?enabled=false",

@@ -62,10 +62,9 @@ API prefix: `/api`. JSON requests/responses use Pydantic validation. Authenticat
 
 ## Student
 
-| GET | `/api/student/attendance/threshold` | Student-scoped configured attendance threshold |
-
 | Method | Path | Purpose |
 |---|---|---|
+| GET | `/api/student/attendance/threshold` | Student-scoped configured attendance threshold |
 | GET | `/api/student/attendance` | Course attendance summaries; optional `course_id` |
 | GET | `/api/student/timetable` | Recurring timetable for the student's active section |
 | GET | `/api/student/announcements` | Announcements for the student's active section |
@@ -81,6 +80,7 @@ API prefix: `/api`. JSON requests/responses use Pydantic validation. Authenticat
 | POST | `/api/notifications/{id}/read` | Mark own notification read |
 | GET | `/api/notifications/preferences` | Read own channel preferences |
 | PUT | `/api/notifications/preferences/{channel}?enabled=true` | Set own channel preference |
+| GET | `/api/student/face-profile` | Read own enrollment/consent status only (never returns biometric embeddings) |
 | POST/DELETE | `/api/student/face-profile/enroll` and `/api/student/face-profile` | Consent-based enrollment / revocation |
 
 ## WebSocket
