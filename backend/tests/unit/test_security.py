@@ -66,25 +66,30 @@ def test_production_settings_require_https_exact_origins_and_cookie_storage_defa
     # local storage is permitted in production (no longer raises)
     production_settings(storage_backend="local", s3_bucket=None, s3_access_key_id=None, s3_secret_access_key=None)
 
-    # frontend_base_url that is not in cors_origins still raises
-    with pytest.raises(ValueError, match="AMS_FRONTEND_BASE_URL must be in AMS_CORS_ORIGINS"):
-        production_settings(frontend_base_url="https://other.example")
+    # frontend_base_url pointing to a different https domain is now auto-added to cors list
+    # so it no longer raises — both origins are allowed
+    s = production_settings(frontend_base_url="https://other.example")
+    assert "https://other.example" in s.cors_origins
 
 
 def test_production_settings_do_not_fall_back_to_localhost_or_local_storage() -> None:
-    # No cors_origins set — should raise about missing CORS list
-    with pytest.raises(ValueError, match="AMS_CORS_ORIGINS"):
-        Settings(
-            _env_file=None,
-            env="production",
-            secret_key="a" * 48,
-            cookie_samesite="none",
-            storage_backend="s3",
-            s3_bucket="private-ams-documents",
-            s3_access_key_id="test-access-key",
-            s3_secret_access_key="test-secret-key",
-            cors_origins=[],
-        )
+    # When only localhost origins exist, they are auto-dropped in production.
+    # AMS_FRONTEND_BASE_URL (https) is then auto-added, so this now succeeds.
+    s = Settings(
+        _env_file=None,
+        env="production",
+        secret_key="a" * 48,
+        cookie_samesite="none",
+        storage_backend="s3",
+        s3_bucket="private-ams-documents",
+        s3_access_key_id="test-access-key",
+        s3_secret_access_key="test-secret-key",
+        cors_origins=["http://localhost:3000"],
+        frontend_base_url="https://ams.example",
+    )
+    # localhost should be stripped; https frontend should be present
+    assert "http://localhost:3000" not in s.cors_origins
+    assert "https://ams.example" in s.cors_origins
 
 
 def test_settings_reject_unknown_deployment_environment() -> None:

@@ -143,24 +143,36 @@ class Settings(BaseSettings):
             # S3 is strongly recommended for production document storage, but local
             # storage is permitted so the service can start without object-storage
             # credentials (e.g. for demo / academic deployments).
+
+            # Auto-drop localhost / 127.0.0.1 origins that leak in from the default
+            # dev config when AMS_CORS_ORIGINS is not explicitly set on Render.
+            https_origins = [
+                o for o in self.cors_origins
+                if urlsplit(o).scheme == "https"
+            ]
+
+            # Auto-include the frontend URL so you only need to set
+            # AMS_FRONTEND_BASE_URL on Render and CORS wires up automatically.
+            parsed_fe = urlsplit(self.frontend_base_url)
+            if parsed_fe.scheme == "https" and parsed_fe.netloc:
+                fe_origin = f"{parsed_fe.scheme}://{parsed_fe.netloc}"
+                if fe_origin not in https_origins:
+                    https_origins.append(fe_origin)
+
+            # Write the cleaned list back so the rest of the app sees it.
+            self.cors_origins = https_origins
+
             if not self.cors_origins:
-                raise ValueError("Production requires AMS_CORS_ORIGINS (your Vercel URL)")
+                raise ValueError(
+                    "Production requires at least one https:// origin. "
+                    "Set AMS_FRONTEND_BASE_URL=https://your-app.vercel.app on Render."
+                )
             for origin in self.cors_origins:
                 parsed_origin = urlsplit(origin)
-                if (
-                    "*" in origin
-                    or parsed_origin.scheme != "https"
-                    or not parsed_origin.netloc
-                ):
+                if "*" in origin or parsed_origin.scheme != "https" or not parsed_origin.netloc:
                     raise ValueError(
                         f"Production CORS origin must be an https:// URL, got: {origin!r}"
                     )
-            # Ensure frontend_base_url is within the allowed CORS list
-            if self.frontend_base_url not in self.cors_origins:
-                raise ValueError(
-                    "Production AMS_FRONTEND_BASE_URL must be in AMS_CORS_ORIGINS. "
-                    f"Got frontend={self.frontend_base_url!r}, cors={self.cors_origins!r}"
-                )
         return self
 
 
