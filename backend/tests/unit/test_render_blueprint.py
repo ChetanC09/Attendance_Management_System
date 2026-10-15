@@ -53,6 +53,6 @@ def test_notification_worker_reuses_api_production_configuration() -> None:
     assert api_env["AMS_CORS_ORIGINS"]["sync"] is False
     assert api_env["AMS_FRONTEND_BASE_URL"]["sync"] is False
     assert api_env["AMS_COOKIE_SAMESITE"]["value"] == "none"
-    assert api_env["AMS_STORAGE_BACKEND"]["value"] == "s3"
+    assert api_env["AMS_STORAGE_BACKEND"]["value"] == "local"
     assert api_env["AMS_S3_ACCESS_KEY_ID"]["sync"] is False
     assert api_env["AMS_S3_SECRET_ACCESS_KEY"]["sync"] is False

@@ -60,8 +60,8 @@ def test_production_settings_require_https_exact_origins_and_cookie_storage_defa
     with pytest.raises(ValueError, match="AMS_COOKIE_SAMESITE=none"):
         production_settings(cookie_samesite="lax")
 
-    with pytest.raises(ValueError, match="private S3-compatible"):
-        production_settings(storage_backend="local")
+    # local storage is now permitted in production (no longer raises)
+    production_settings(storage_backend="local", s3_bucket=None, s3_access_key_id=None, s3_secret_access_key=None)
 
     with pytest.raises(ValueError, match="must be an exact origin"):
         production_settings(frontend_base_url="https://other.example")

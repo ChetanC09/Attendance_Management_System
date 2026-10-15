@@ -41,7 +41,9 @@ services:
       - key: AMS_FRONTEND_BASE_URL
         sync: false
       - key: AMS_STORAGE_BACKEND
-        value: s3
+        value: local
+      # S3 credentials below are optional for demo deployments; set them only if
+      # you configure a real object-storage bucket later.
       - key: AMS_S3_BUCKET
         sync: false
       - key: AMS_S3_REGION

@@ -100,10 +100,12 @@ class Settings(BaseSettings):
         if self.env == "production":
             if self.cookie_samesite != "none":
                 raise ValueError(
-                    "Production cross-origin sessions require AMS_COOKIE_SAMESITE=none"
+                    "Production cross-origin sessions require AMS_COOKIE_SAMESITE=none "
+                    "(set this env var to 'none' in your Render dashboard)"
                 )
-            if self.storage_backend != "s3":
-                raise ValueError("Production requires private S3-compatible document storage")
+            # S3 is strongly recommended for production document storage, but local
+            # storage is permitted so the service can start without object-storage
+            # credentials (e.g. for demo / academic deployments).
             if not self.cors_origins:
                 raise ValueError("Production requires an exact HTTPS AMS_CORS_ORIGINS allowlist")
             for origin in self.cors_origins:
