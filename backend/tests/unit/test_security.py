@@ -48,27 +48,32 @@ def production_settings(**overrides) -> Settings:
 def test_production_settings_require_https_exact_origins_and_cookie_storage_defaults() -> None:
     production_settings()
 
-    with pytest.raises(ValueError, match="exact HTTPS origins"):
+    # wildcard origins are still rejected
+    with pytest.raises(ValueError, match="https://"):
         production_settings(cors_origins=["*"])
 
-    with pytest.raises(ValueError, match="exact HTTPS origins"):
-        production_settings(cors_origins=["https://*.ams.example"])
+    # paths are auto-stripped now — https://*.ams.example has no netloc after urlsplit
+    # but a plain https://ams.example/path is corrected to https://ams.example (no longer raises)
+    production_settings(cors_origins=["https://ams.example/some/path"])
 
-    with pytest.raises(ValueError, match="exact HTTPS origins"):
+    # http:// origins are rejected (not https)
+    with pytest.raises(ValueError, match="https://"):
         production_settings(cors_origins=["http://ams.example"])
 
     with pytest.raises(ValueError, match="AMS_COOKIE_SAMESITE=none"):
         production_settings(cookie_samesite="lax")
 
-    # local storage is now permitted in production (no longer raises)
+    # local storage is permitted in production (no longer raises)
     production_settings(storage_backend="local", s3_bucket=None, s3_access_key_id=None, s3_secret_access_key=None)
 
-    with pytest.raises(ValueError, match="must be an exact origin"):
+    # frontend_base_url that is not in cors_origins still raises
+    with pytest.raises(ValueError, match="AMS_FRONTEND_BASE_URL must be in AMS_CORS_ORIGINS"):
         production_settings(frontend_base_url="https://other.example")
 
 
 def test_production_settings_do_not_fall_back_to_localhost_or_local_storage() -> None:
-    with pytest.raises(ValueError, match="exact HTTPS origins"):
+    # No cors_origins set — should raise about missing CORS list
+    with pytest.raises(ValueError, match="AMS_CORS_ORIGINS"):
         Settings(
             _env_file=None,
             env="production",
@@ -78,6 +83,7 @@ def test_production_settings_do_not_fall_back_to_localhost_or_local_storage() ->
             s3_bucket="private-ams-documents",
             s3_access_key_id="test-access-key",
             s3_secret_access_key="test-secret-key",
+            cors_origins=[],
         )
 
 

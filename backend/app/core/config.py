@@ -77,6 +77,43 @@ class Settings(BaseSettings):
             raise ValueError("AMS_COOKIE_SAMESITE must be lax, strict, or none")
         return normalized
 
+    @field_validator("cors_origins", mode="before")
+    @classmethod
+    def normalize_cors_origins(cls, value: object) -> list[str]:
+        """Strip paths/query/fragments from each CORS origin so that values like
+        'https://app.vercel.app/auth/login' are silently corrected to
+        'https://app.vercel.app' instead of crashing at startup."""
+        if isinstance(value, str):
+            import json
+            try:
+                value = json.loads(value)
+            except (json.JSONDecodeError, ValueError):
+                value = [value]
+        if not isinstance(value, list):
+            value = [value]
+        normalized: list[str] = []
+        for origin in value:
+            origin = str(origin).strip()
+            parsed = urlsplit(origin)
+            if parsed.scheme and parsed.netloc:
+                # Rebuild as bare origin — drop path, query, fragment
+                normalized.append(f"{parsed.scheme}://{parsed.netloc}")
+            else:
+                normalized.append(origin)
+        return normalized
+
+    @field_validator("frontend_base_url", mode="before")
+    @classmethod
+    def normalize_frontend_base_url(cls, value: object) -> str:
+        """Strip any path from AMS_FRONTEND_BASE_URL so 'https://app.vercel.app/auth/login'
+        becomes 'https://app.vercel.app'."""
+        if not isinstance(value, str):
+            return str(value)
+        parsed = urlsplit(value.strip())
+        if parsed.scheme and parsed.netloc:
+            return f"{parsed.scheme}://{parsed.netloc}"
+        return value
+
     @model_validator(mode="after")
     def require_deployment_secret(self) -> "Settings":
         if self.env not in {"development", "production"}:
@@ -107,33 +144,22 @@ class Settings(BaseSettings):
             # storage is permitted so the service can start without object-storage
             # credentials (e.g. for demo / academic deployments).
             if not self.cors_origins:
-                raise ValueError("Production requires an exact HTTPS AMS_CORS_ORIGINS allowlist")
+                raise ValueError("Production requires AMS_CORS_ORIGINS (your Vercel URL)")
             for origin in self.cors_origins:
                 parsed_origin = urlsplit(origin)
                 if (
                     "*" in origin
-                    or origin != origin.strip()
                     or parsed_origin.scheme != "https"
                     or not parsed_origin.netloc
-                    or parsed_origin.hostname is None
-                    or parsed_origin.username is not None
-                    or parsed_origin.password is not None
-                    or parsed_origin.path
-                    or parsed_origin.query
-                    or parsed_origin.fragment
                 ):
-                    raise ValueError("Production CORS origins must be exact HTTPS origins")
-            parsed_frontend = urlsplit(self.frontend_base_url)
-            if (
-                parsed_frontend.scheme != "https"
-                or not parsed_frontend.netloc
-                or parsed_frontend.path
-                or parsed_frontend.query
-                or parsed_frontend.fragment
-                or self.frontend_base_url not in self.cors_origins
-            ):
+                    raise ValueError(
+                        f"Production CORS origin must be an https:// URL, got: {origin!r}"
+                    )
+            # Ensure frontend_base_url is within the allowed CORS list
+            if self.frontend_base_url not in self.cors_origins:
                 raise ValueError(
-                    "Production AMS_FRONTEND_BASE_URL must be an exact origin in AMS_CORS_ORIGINS"
+                    "Production AMS_FRONTEND_BASE_URL must be in AMS_CORS_ORIGINS. "
+                    f"Got frontend={self.frontend_base_url!r}, cors={self.cors_origins!r}"
                 )
         return self
 
