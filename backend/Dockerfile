@@ -8,15 +8,18 @@ WORKDIR /srv/ams
 COPY requirements.lock ./
 RUN python -m pip install --no-cache-dir --require-hashes -r requirements.lock
 
-# Vision extras — installed without hash-lock because they are optional platform
-# dependencies compiled for the target Linux ABI. Pinned to the same version
-# ranges declared in pyproject.toml [project.optional-dependencies].vision.
-# buffalo_sc is the compact InsightFace model (~35 MB total weights, ~150 MB RAM
-# at inference) — suitable for 512 MB containers. buffalo_l requires >400 MB RAM.
-RUN python -m pip install --no-cache-dir \
-    "insightface>=0.7,<1" \
-    "onnxruntime>=1.18,<2" \
-    "opencv-python-headless>=4.10,<5"
+# Vision extras — need build-essential to compile insightface's Cython extension.
+# libgl1 is required by opencv at import time on headless systems.
+# Packages are purged after the wheel build to keep the final image lean.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        build-essential \
+        libgl1 \
+    && python -m pip install --no-cache-dir \
+        "insightface>=0.7,<1" \
+        "onnxruntime>=1.18,<2" \
+        "opencv-python-headless>=4.10,<5" \
+    && apt-get purge -y --auto-remove build-essential \
+    && rm -rf /var/lib/apt/lists/*
 
 # Pre-download buffalo_sc face analysis model at build time so it is baked into
 # the image layer and available immediately without a runtime network request.
