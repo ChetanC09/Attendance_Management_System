@@ -198,7 +198,7 @@ def main() -> None:
             db, FACULTY_EMAIL, FACULTY_ID, FACULTY_NAME, UserRole.FACULTY, faculty_hash
         )
         if not db.scalar(
-            select(FacultyProfile.id).where(FacultyProfile.user_id == faculty.id)
+            select(FacultyProfile.user_id).where(FacultyProfile.user_id == faculty.id)
         ):
             db.add(FacultyProfile(user_id=faculty.id, department_id=dept.id))
             db.flush()
@@ -210,7 +210,7 @@ def main() -> None:
                 db, email, inst_id, name, UserRole.STUDENT, student_hash
             )
             if not db.scalar(
-                select(StudentProfile.id).where(StudentProfile.user_id == s.id)
+                select(StudentProfile.user_id).where(StudentProfile.user_id == s.id)
             ):
                 db.add(
                     StudentProfile(
