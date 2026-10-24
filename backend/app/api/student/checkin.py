@@ -75,7 +75,7 @@ def _active_lecture_and_session(
             AttendanceSession.status == AttendanceSessionStatus.OPEN,
             Lecture.status != LectureStatus.CANCELLED,
         )
-        .order_by(AttendanceSession.opened_at.desc())
+        .order_by(AttendanceSession.started_at.desc())
         .limit(1)
     )
     if open_session:
