@@ -39,7 +39,7 @@ type Roster = {
   reason: string | null;
 };
 
-type SocketState = 'disconnected' | 'connecting' | 'live' | 'offline';
+type SocketState = 'disconnected' | 'connecting' | 'live' | 'polling' | 'offline';
 
 type TimetableItem = {
   allocation_id: string;
@@ -93,9 +93,9 @@ export const FacultyMarkAttendanceView: React.FC<{ mode?: string }> = () => {
         body: jsonBody({ enforced: next }),
       });
       setNetworkStatus(updated);
-      addToast('info', next ? 'Classroom Wi-Fi lock enabled' : 'Demo Mode enabled: students on any network can check in');
+      addToast(next ? 'Classroom Wi-Fi lock enabled' : 'Demo Mode enabled: students on any network can check in', 'info');
     } catch (e) {
-      addToast('error', e instanceof Error ? e.message : 'Failed to update network lock');
+      addToast(e instanceof Error ? e.message : 'Failed to update network lock', 'error');
     }
   };
 
@@ -107,9 +107,9 @@ export const FacultyMarkAttendanceView: React.FC<{ mode?: string }> = () => {
         body: jsonBody({ auto_detect: true, enforced: true }),
       });
       setNetworkStatus(updated);
-      addToast('success', `Detected & bound: ${updated.bound_subnet} (IP: ${updated.detected_ip})`);
+      addToast(`Detected & bound: ${updated.bound_subnet} (IP: ${updated.detected_ip})`, 'success');
     } catch (e) {
-      addToast('error', e instanceof Error ? e.message : 'Failed to detect network');
+      addToast(e instanceof Error ? e.message : 'Failed to detect network', 'error');
     }
   };
 
@@ -177,6 +177,17 @@ export const FacultyMarkAttendanceView: React.FC<{ mode?: string }> = () => {
     if (!session || session.status === 'CLOSED') {
       setSocketStatus('disconnected');
       return;
+    }
+    // Vercel production calls the API through same-origin rewrites. Refresh
+    // the roster over the authenticated API there; use WebSocket when an
+    // explicit API origin is configured (local development).
+    if (!apiBaseUrl) {
+      setSocketStatus('polling');
+      void loadRoster(session.id).catch(() => setSocketStatus('offline'));
+      const timer = window.setInterval(() => {
+        void loadRoster(session.id).catch(() => setSocketStatus('offline'));
+      }, 4000);
+      return () => window.clearInterval(timer);
     }
     const socketUrl = new URL(apiBaseUrl);
     socketUrl.protocol = socketUrl.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -412,8 +423,8 @@ export const FacultyMarkAttendanceView: React.FC<{ mode?: string }> = () => {
 
         {session && session.status === 'OPEN' && (
           <div className="flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-800">
-            {socketStatus === 'live' ? <Wifi size={14} className="animate-pulse text-emerald-600" /> : <WifiOff size={14} className="text-amber-600" />}
-            <span>{socketStatus === 'live' ? 'Live check-in sync active' : 'Live sync connecting…'}</span>
+            {socketStatus === 'live' || socketStatus === 'polling' ? <Wifi size={14} className="animate-pulse text-emerald-600" /> : <WifiOff size={14} className="text-amber-600" />}
+            <span>{socketStatus === 'live' ? 'Live check-in sync active' : socketStatus === 'polling' ? 'Roster refreshes every 4 seconds' : 'Live sync connecting…'}</span>
           </div>
         )}
       </header>

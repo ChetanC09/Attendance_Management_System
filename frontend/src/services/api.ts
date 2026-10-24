@@ -1,4 +1,8 @@
-const API_BASE = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
+// Production uses the same-origin Vercel rewrites so the browser's session
+// cookie stays first-party. Keep the explicit API URL override for local dev.
+const API_BASE = import.meta.env.PROD
+  ? ''
+  : (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
 
 export class ApiError extends Error {
   status: number;

@@ -118,8 +118,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const signIn = async (email: string, password: string) => {
     const session = await api<{ user: ApiUser }>('/api/auth/login', { method: 'POST', body: jsonBody({ email, password }) });
-    setApiUser(session.user);
-    const role = session.user.role.toLowerCase() as UserRole;
+    // Treat the session as authenticated only after the browser has stored and
+    // returned the HttpOnly cookie. This avoids showing a signed-in shell when
+    // a cross-origin deployment silently drops the cookie.
+    const user = await api<ApiUser>('/api/auth/me');
+    if (user.id !== session.user.id) throw new Error('Sign-in session could not be verified. Please try again.');
+    setApiUser(user);
+    const role = user.role.toLowerCase() as UserRole;
     setCurrentRole(role);
     setCurrentRoute(role === 'admin' ? 'institutional-health-admin' : role === 'faculty' ? 'faculty-workspace' : 'overview-dashboard');
   };
