@@ -58,7 +58,7 @@ async def enroll_face(
         db.add(profile)
         db.flush()
     embedding_row = FaceEmbedding(
-        profile_id=profile.id, embedding=embedding, model_version="insightface-buffalo_l"
+        profile_id=profile.id, embedding=embedding, model_version="insightface-buffalo_sc"
     )
     db.add(embedding_row)
     record_audit(

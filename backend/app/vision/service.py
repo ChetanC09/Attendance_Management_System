@@ -26,8 +26,8 @@ class InsightFaceVisionService(VisionService):
             ) from error
         self.cv2 = cv2
         self.np = np
-        self.analysis = FaceAnalysis(name="buffalo_l", providers=["CPUExecutionProvider"])
-        self.analysis.prepare(ctx_id=-1, det_size=(640, 640))
+        self.analysis = FaceAnalysis(name="buffalo_sc", providers=["CPUExecutionProvider"])
+        self.analysis.prepare(ctx_id=-1, det_size=(320, 320))
 
     def embedding_from_image(self, image_bytes: bytes) -> tuple[list[float] | None, int]:
         raw = self.np.frombuffer(image_bytes, dtype=self.np.uint8)
