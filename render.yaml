@@ -15,7 +15,7 @@ services:
     region: singapore
     dockerfilePath: ./backend/Dockerfile
     dockerContext: ./backend
-    dockerCommand: sh -c 'alembic upgrade head && exec python -m app.server'
+    dockerCommand: sh -c 'alembic upgrade head && python scripts/seed_production_demo.py && exec python -m app.server'
     healthCheckPath: /health/ready
     envVars:
       - key: AMS_ENV
