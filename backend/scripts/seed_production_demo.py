@@ -1,16 +1,18 @@
-"""One-time idempotent production demo seeder for SPIT AMS.
+"""Idempotently seed public demo data for the SPIT AMS deployment.
 
-Run from the Render shell:
-    python scripts/seed_production_demo.py
+The Render API startup runs this after applying database migrations. It is safe
+to run again after a restart: existing accounts and records are preserved.
 
-This script is safe to run multiple times — every section is idempotent and
-will not overwrite existing rows.  All demo credentials are printed at the end.
+Demo accounts use intentionally public credentials; never use them for real
+personal or institutional data.
 """
 
 from datetime import UTC, date, datetime, time, timedelta
+import os
 
 from sqlalchemy import select
 
+from app.core.config import settings
 from app.core.database import SessionLocal
 from app.core.security import hash_password
 from app.models import (
@@ -63,6 +65,30 @@ STUDENTS = [
 # ─────────────────────────────────────────────────────────────────────────────
 
 
+def _bootstrap_configured_admin() -> None:
+    """Create an owner-supplied first admin when bootstrap values are configured."""
+    names = (
+        "AMS_BOOTSTRAP_ADMIN_EMAIL",
+        "AMS_BOOTSTRAP_ADMIN_ID",
+        "AMS_BOOTSTRAP_ADMIN_NAME",
+        "AMS_BOOTSTRAP_ADMIN_PASSWORD",
+    )
+    values = [os.getenv(name) for name in names]
+    if not any(values):
+        return
+    if not all(values):
+        raise SystemExit("Configure all AMS_BOOTSTRAP_ADMIN_* values or remove them")
+
+    with SessionLocal() as db:
+        has_admin = db.scalar(select(User.id).where(User.role == UserRole.ADMIN).limit(1))
+    if has_admin:
+        return
+
+    from scripts.seed_admin import main as create_first_admin
+
+    create_first_admin()
+
+
 def _upsert_user(db, email, inst_id, name, role, password_hash):
     user = db.scalar(select(User).where(User.email == email))
     if user is None:
@@ -80,6 +106,7 @@ def _upsert_user(db, email, inst_id, name, role, password_hash):
 
 
 def main() -> None:
+    _bootstrap_configured_admin()
     today = datetime.now(UTC).date()
     # Academic year: July–June
     ay_start = date(today.year if today.month >= 7 else today.year - 1, 7, 1)
@@ -108,8 +135,6 @@ def main() -> None:
                     "An admin already exists — skipping admin creation. "
                     "Log in with your existing admin credentials."
                 )
-        else:
-            admin.password_hash = admin_hash  # sync password if re-run
 
         # ── Department / Academic structure ──────────────────────────────────
         dept = db.scalar(select(Department).where(Department.code == "CSE"))
@@ -429,13 +454,8 @@ def main() -> None:
             )
 
     # ── Summary ───────────────────────────────────────────────────────────────
-    print("\n✅  SPIT AMS demo data seeded successfully.\n")
-    print("─── Login credentials ─────────────────────────────────────────")
-    print(f"  Admin   : {ADMIN_EMAIL}  /  {ADMIN_PASSWORD}")
-    print(f"  Faculty : {FACULTY_EMAIL}  /  {FACULTY_PASSWORD}")
-    for name, _, email in STUDENTS:
-        print(f"  Student : {email}  /  {STUDENT_PASSWORD}  ({name})")
-    print("───────────────────────────────────────────────────────────────")
+    print("SPIT AMS production demo data seeded; existing account passwords were preserved.")
+    print(f"Demo admin: {ADMIN_EMAIL}; faculty: {FACULTY_EMAIL}; students: {len(STUDENTS)}")
     print("  Demo student for video: rahul.mehta@spit.ac.in")
     print("  Rahul is borderline at ~74% attendance — good for recovery demo.")
     print("  Today's DBMS lecture is SCHEDULED and ready for faculty to open.")
@@ -444,4 +464,6 @@ def main() -> None:
 
 
 if __name__ == "__main__":
+    if settings.env != "production":
+        raise SystemExit("Production demo seeding requires AMS_ENV=production")
     main()

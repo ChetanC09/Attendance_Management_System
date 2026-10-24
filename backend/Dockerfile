@@ -35,4 +35,4 @@ COPY migrations ./migrations
 COPY alembic.ini ./
 
 EXPOSE 8000
-CMD ["python", "-m", "app.server"]
+CMD ["sh", "-c", "alembic upgrade head && python -m scripts.seed_production_demo && exec python -m app.server"]

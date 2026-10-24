@@ -15,7 +15,8 @@ services:
     region: singapore
     dockerfilePath: ./backend/Dockerfile
     dockerContext: ./backend
-    dockerCommand: sh -c 'alembic upgrade head && python scripts/seed_production_demo.py && exec python -m app.server'
+    # Apply migrations and idempotent demo fixtures before serving requests.
+    dockerCommand: sh -c 'alembic upgrade head && python -m scripts.seed_production_demo && exec python -m app.server'
     healthCheckPath: /health/ready
     envVars:
       - key: AMS_ENV
