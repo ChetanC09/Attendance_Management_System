@@ -61,6 +61,9 @@ def start_session(
         session = create_attendance_session(db, faculty, payload.lecture_id)
         faculty_ip = get_client_ip(request)
         bind_session_network(db, session.id, faculty_ip, enforced=True)
+        # create_attendance_session commits the session itself. Persist the
+        # network binding written afterward in this request as well.
+        db.commit()
         return session
     except AttendanceRuleError as error:
         _raise_rule(error)
@@ -94,8 +97,13 @@ def update_network_lock(
     custom_subnet = payload.get("custom_subnet")
     if auto_detect:
         faculty_ip = get_client_ip(request)
-        return bind_session_network(db, session.id, faculty_ip, enforced=enforced)
-    return update_session_network(db, session.id, enforced=enforced, custom_subnet=custom_subnet)
+        network = bind_session_network(db, session.id, faculty_ip, enforced=enforced)
+    else:
+        network = update_session_network(
+            db, session.id, enforced=enforced, custom_subnet=custom_subnet
+        )
+    db.commit()
+    return network
 
 
 @router.get("/session/{session_id}", response_model=AttendanceSessionDetail)
