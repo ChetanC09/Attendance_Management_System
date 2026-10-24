@@ -30,7 +30,7 @@ fa.prepare(ctx_id=-1, det_size=(320, 320)); \
 print('buffalo_sc model ready')"
 
 COPY app ./app
-COPY scripts/seed_admin.py ./scripts/seed_admin.py
+COPY scripts ./scripts
 COPY migrations ./migrations
 COPY alembic.ini ./
 
