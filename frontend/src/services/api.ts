@@ -9,6 +9,12 @@ export class ApiError extends Error {
   constructor(status: number, message: string) { super(message); this.name = 'ApiError'; this.status = status; }
 }
 
+const notifyUnauthorized = (status: number, path: string) => {
+  if (status === 401 && !path.endsWith('/auth/login') && !path.endsWith('/auth/me')) {
+    window.dispatchEvent(new Event('ams:unauthorized'));
+  }
+};
+
 export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   const headers = new Headers(init.headers);
   headers.set('X-Requested-With', 'XMLHttpRequest');
@@ -16,6 +22,7 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   const response = await fetch(`${API_BASE}${path.startsWith('/api') || path.startsWith('/health') ? '' : '/api'}${path}`, {
     ...init, headers, credentials: 'include',
   });
+  notifyUnauthorized(response.status, path);
   if (!response.ok) {
     let message = `Request failed (${response.status})`;
     try {
@@ -35,6 +42,7 @@ export async function apiBlob(path: string): Promise<Blob> {
     headers: { 'X-Requested-With': 'XMLHttpRequest' },
     credentials: 'include',
   });
+  notifyUnauthorized(response.status, path);
   if (!response.ok) {
     let message = `Request failed (${response.status})`;
     try {

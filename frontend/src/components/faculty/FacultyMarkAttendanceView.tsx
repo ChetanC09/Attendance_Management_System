@@ -138,26 +138,32 @@ export const FacultyMarkAttendanceView: React.FC<{ mode?: string }> = () => {
         setLectureId(preferredLecture || scheduled[0]?.id || '');
 
         const savedId = window.sessionStorage.getItem(sessionKey);
+        let restored: Session | null = null;
         if (savedId) {
-          let restored: Session | null = null;
           try {
             restored = await api<Session>(`/api/faculty/attendance/session/${encodeURIComponent(savedId)}`);
           } catch {
             window.sessionStorage.removeItem(sessionKey);
           }
-          if (!active) return;
-          if (restored?.status === 'OPEN') {
-            setSession(restored);
-            void loadNetwork(restored.id);
-            try {
-              await loadRoster(restored.id);
-            } catch (reason) {
-              setError(
-                reason instanceof Error ? reason.message : 'Open session restored, but roster failed to load.'
-              );
-            }
-          } else if (restored) {
-            window.sessionStorage.removeItem(sessionKey);
+        }
+        if (!restored || restored.status !== 'OPEN') {
+          if (restored) window.sessionStorage.removeItem(sessionKey);
+          // Session storage is tab-local. Discover sessions from the API so a
+          // faculty member can recover after changing roles or opening a new tab.
+          const openSessions = await api<Session[]>('/api/faculty/attendance/sessions/open');
+          restored = openSessions[0] ?? null;
+        }
+        if (!active) return;
+        if (restored?.status === 'OPEN') {
+          window.sessionStorage.setItem(sessionKey, restored.id);
+          setSession(restored);
+          void loadNetwork(restored.id);
+          try {
+            await loadRoster(restored.id);
+          } catch (reason) {
+            setError(
+              reason instanceof Error ? reason.message : 'Open session restored, but roster failed to load.'
+            );
           }
         }
       } catch (reason) {

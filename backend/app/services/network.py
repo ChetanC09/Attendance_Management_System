@@ -3,7 +3,7 @@ import logging
 from datetime import UTC, datetime
 from uuid import UUID
 
-from fastapi import Request
+from fastapi import HTTPException, Request
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -13,10 +13,27 @@ logger = logging.getLogger(__name__)
 
 
 def get_client_ip(request: Request) -> str:
-    """Return the client IP, respecting X-Forwarded-For from proxies."""
-    forwarded = request.headers.get("X-Forwarded-For")
+    """Return the original client IP supplied by the trusted deployment proxy."""
+    forwarded = request.headers.get("x-vercel-forwarded-for") or request.headers.get(
+        "x-forwarded-for"
+    )
     if forwarded:
-        return forwarded.split(",")[0].strip()
+        candidate = forwarded.split(",")[0].strip()
+        try:
+            address = ipaddress.ip_address(candidate)
+        except ValueError:
+            address = None
+        if address and not (settings.env == "production" and address.is_loopback):
+            return str(address)
+
+    # In production request.client is the Render/Vercel connection, not the
+    # user's device. Falling back to it can bind every session to loopback or a
+    # shared proxy address and make the geofence both unusable and misleading.
+    if settings.env == "production":
+        raise HTTPException(
+            status_code=503,
+            detail="The deployment proxy did not provide a valid client IP. Try again shortly.",
+        )
     if request.client:
         return request.client.host
     return "127.0.0.1"

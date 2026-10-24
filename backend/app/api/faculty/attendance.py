@@ -9,7 +9,13 @@ from app.core.config import settings
 from app.core.database import get_db
 from app.dependencies.auth import require_roles
 from app.models.academic import CourseAllocation, StudentProfile
-from app.models.attendance import Attendance, AttendanceSession, AttendanceSource, AttendanceStatus
+from app.models.attendance import (
+    Attendance,
+    AttendanceSession,
+    AttendanceSessionStatus,
+    AttendanceSource,
+    AttendanceStatus,
+)
 from app.models.timetable import Lecture
 from app.models.user import User, UserRole
 from app.schemas.attendance import (
@@ -50,6 +56,25 @@ def _raise_rule(error: AttendanceRuleError) -> None:
     raise HTTPException(code, message) from None
 
 
+@router.get("/sessions/open", response_model=list[AttendanceSessionResponse])
+def list_open_sessions(
+    faculty: User = Faculty, db: Session = Depends(get_db)
+) -> list[AttendanceSession]:
+    """List open sessions for courses assigned to the signed-in faculty member."""
+    return list(
+        db.scalars(
+            select(AttendanceSession)
+            .join(Lecture, Lecture.id == AttendanceSession.lecture_id)
+            .join(CourseAllocation, CourseAllocation.id == Lecture.allocation_id)
+            .where(
+                CourseAllocation.faculty_id == faculty.id,
+                AttendanceSession.status == AttendanceSessionStatus.OPEN,
+            )
+            .order_by(AttendanceSession.started_at.desc())
+        )
+    )
+
+
 @router.post("/session", response_model=AttendanceSessionResponse, status_code=201)
 def start_session(
     payload: StartSessionRequest,
@@ -58,8 +83,8 @@ def start_session(
     db: Session = Depends(get_db),
 ) -> AttendanceSession:
     try:
-        session = create_attendance_session(db, faculty, payload.lecture_id)
         faculty_ip = get_client_ip(request)
+        session = create_attendance_session(db, faculty, payload.lecture_id)
         bind_session_network(db, session.id, faculty_ip, enforced=True)
         # create_attendance_session commits the session itself. Persist the
         # network binding written afterward in this request as well.

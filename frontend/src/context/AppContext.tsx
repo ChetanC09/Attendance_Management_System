@@ -110,6 +110,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, []);
 
   useEffect(() => {
+    const onUnauthorized = () => {
+      setApiUser(null);
+      setCurrentRoute('login');
+      setToasts((previous) => [
+        ...previous,
+        {
+          id: `session_expired_${Date.now()}`,
+          type: 'warning',
+          title: 'Please sign in again',
+          message: 'Your session expired or changed in another tab.',
+        },
+      ]);
+    };
+    window.addEventListener('ams:unauthorized', onUnauthorized);
+    return () => window.removeEventListener('ams:unauthorized', onUnauthorized);
+  }, [setCurrentRoute]);
+
+  useEffect(() => {
     if (!apiUser) { setNotifications([]); return; }
     api<Array<{ id: string; title: string; message: string; channel: string; status: string; read_at: string | null; created_at: string }>>('/api/notifications')
       .then((rows) => setNotifications(rows.map((row) => ({ id: row.id, title: row.title, message: row.message, category: 'system', timestamp: row.created_at, unread: !row.read_at, badge: row.channel }))))
